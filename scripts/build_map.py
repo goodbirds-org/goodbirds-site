@@ -1,0 +1,486 @@
+# scripts/build_map.py
+#
+# Multi-city ready via env:
+# - OUTPUT_DIR: where HTML maps are written (e.g., docs/maps/cambridge)
+# - CENTER_LAT, CENTER_LON, MAP_MAIN_TITLE
+# - DEFAULT_RADIUS_KM
+# - RING_KMS: comma-separated ring radii, e.g., "5,10,15" or "5,10,15,20"
+#
+# Functionality unchanged:
+# - Popups show species name and deduped checklists for that species at that location
+# - Info "i" button with compact panel and large logo
+# - Layers control with Collapse/Expand and color swatches; no separate legend
+# - MiniMap off; distance measure tool removed
+
+import os
+import sys
+import base64
+import hashlib
+import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from collections import defaultdict, OrderedDict
+
+import folium
+from folium.plugins import MarkerCluster, Fullscreen, LocateControl, MousePosition
+
+try:
+    from IPython.display import display  # noqa: F401
+    IN_NOTEBOOK = True
+except Exception:
+    IN_NOTEBOOK = False
+
+# ---------- Paths ----------
+if "google.colab" in sys.modules:
+    default_output_dir = "/content/bird_maps"
+elif os.name == "nt":
+    default_output_dir = "C:\\Temp\\bird_maps"
+else:
+    default_output_dir = "/tmp/bird_maps"
+
+output_dir = os.getenv("OUTPUT_DIR", default_output_dir)
+KEEP_COUNT = int(os.getenv("KEEP_COUNT", "30"))
+os.makedirs(output_dir, exist_ok=True)
+
+# ---------- Config ----------
+API_KEY = os.getenv("EBIRD_API_KEY", "").strip()
+if not API_KEY:
+    API_KEY = "REPLACE_WITH_YOUR_EBIRD_API_KEY"
+
+CENTER_LAT = float(os.getenv("CENTER_LAT", "42.378500"))
+CENTER_LON = float(os.getenv("CENTER_LON", "-71.115600"))
+DEFAULT_RADIUS_KM = int(os.getenv("DEFAULT_RADIUS_KM", "20"))
+BACK_DAYS = int(os.getenv("BACK_DAYS", "2"))
+MAX_RESULTS = int(os.getenv("MAX_RESULTS", "200"))
+ZOOM_START = int(os.getenv("ZOOM_START", "11"))
+SPECIES_LAYER_THRESHOLD = int(os.getenv("SPECIES_LAYER_THRESHOLD", "200"))
+ARCHIVE_URL = os.getenv("ARCHIVE_URL", "/cambridge/archive.html")
+MAP_MAIN_TITLE = os.getenv("MAP_MAIN_TITLE", "Cambridge, MA & Vicinity")
+
+def _parse_ring_kms(text: str):
+    vals = []
+    for part in (text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            vals.append(int(part))
+        except ValueError:
+            pass
+    return vals or [5, 10, 15, 20]
+
+RING_KMS = _parse_ring_kms(os.getenv("RING_KMS", "5,10,15,20"))
+
+# Logo config
+MAP_LOGO_FILE = os.getenv("MAP_LOGO_FILE", "").strip()
+MAP_LOGO_URL = os.getenv("MAP_LOGO_URL", "").strip()
+DEFAULT_LOGO_NAME = "goodbirds_logo_text.png"
+
+def color_for_species(name: str) -> str:
+    h = int(hashlib.sha1((name or 'Unknown').encode("utf-8")).hexdigest(), 16) % 360
+    def hsl_to_rgb(h, s=0.70, l=0.45):
+        c = (1 - abs(2*l - 1)) * s
+        x = c * (1 - abs(((h/60) % 2) - 1))
+        m = l - c/2
+        if   0 <= h < 60:   r,g,b = c,x,0
+        elif 60 <= h < 120: r,g,b = x,c,0
+        elif 120<= h <180:  r,g,b = 0,c,x
+        elif 180<= h <240:  r,g,b = 0,x,c
+        elif 240<= h <300:  r,g,b = x,0,c
+        else:               r,g,b = c,0,x
+        r,g,b = (int((r+m)*255), int((g+m)*255), int((b+m)*255))
+        return "#{:02x}{:02x}{:02x}".format(r,g,b)
+    return hsl_to_rgb(h)
+
+def km_to_m(km: float) -> float:
+    return float(km) * 1000.0
+
+def fetch_notable(lat: float, lon: float, radius_km: int, back_days: int = BACK_DAYS, max_results: int = MAX_RESULTS):
+    url = "https://api.ebird.org/v2/data/obs/geo/recent/notable"
+    params = {"lat": lat, "lng": lon, "dist": radius_km, "back": back_days, "maxResults": max_results}
+    headers = {"X-eBirdApiToken": API_KEY}
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=20)
+        if resp.status_code == 403:
+            raise RuntimeError("403 from eBird. API key missing or invalid.")
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Error fetching data from eBird API: {e}")
+        return []
+
+_CACHE = {}
+def get_data(lat, lon, radius_km, back_days):
+    key = (round(lat, 6), round(lon, 6), int(radius_km), int(back_days))
+    if key in _CACHE:
+        return _CACHE[key]
+    data = fetch_notable(lat, lon, radius_km, back_days)
+    _CACHE[key] = data
+    return data
+
+def add_radius_rings(m, lat, lon):
+    # Center marker
+    folium.CircleMarker([lat, lon], radius=4, color="#2c7fb8", fill=True, fill_opacity=1, tooltip="Center").add_to(m)
+
+    # Inner rings dashed gray, outer ring solid blue
+    if not RING_KMS:
+        return
+    kms_sorted = sorted(set(RING_KMS))
+    last = kms_sorted[-1]
+    inner = [k for k in kms_sorted if k != last]
+    gray_palette = ["#666666", "#555555", "#444444", "#333333", "#222222"]
+    for idx, km in enumerate(inner):
+        color = gray_palette[min(idx, len(gray_palette) - 1)]
+        folium.Circle([lat, lon], radius=km_to_m(km),
+                      color=color, fill=False, weight=2, opacity=0.9, dash_array="6,8").add_to(m)
+        folium.Marker([lat + km/111.0, lon],
+                      icon=folium.DivIcon(html=f"<div style='font-size:12px; color:{color};'>{km} km</div>")
+                      ).add_to(m)
+
+    folium.Circle([lat, lon], radius=km_to_m(last),
+                  color="#08519c", fill=False, weight=3, opacity=0.9).add_to(m)
+    folium.Marker([lat + last/111.0, lon],
+                  icon=folium.DivIcon(html=f"<div style='font-size:12px; color:#08519c; font-weight:bold;'>{last} km</div>")
+                  ).add_to(m)
+
+def add_notice(m, text: str):
+    html = f"""
+    <div style="
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
+      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    ">{text}</div>
+    """
+    m.get_root().html.add_child(folium.Element(html))
+
+def compute_dt_et():
+    tz = ZoneInfo("America/New_York")
+    run_date = os.getenv("RUN_DATE_ET", "")
+    run_slot = os.getenv("RUN_SLOT", "")
+    try:
+        if run_date and run_slot in ("12", "21"):
+            y, mo, d = map(int, run_date.split("-")); h = int(run_slot)
+            dt = datetime(y, mo, d, h, 0, 0, tzinfo=tz)
+        else:
+            dt = datetime.now(tz)
+    except Exception:
+        dt = datetime.now(tz)
+    display_str = dt.strftime("%b %d, %Y %I:%M %p %Z")
+    file_str = dt.strftime("%Y-%m-%d_%H-%M-%S_ET")
+    return dt, display_str, file_str
+
+def _file_to_data_url(path: str) -> str:
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        return ""
+
+def get_logo_src() -> str:
+    if MAP_LOGO_FILE and os.path.isfile(MAP_LOGO_FILE):
+        d = _file_to_data_url(MAP_LOGO_FILE)
+        if d: return d
+    for p in (os.path.join("docs", DEFAULT_LOGO_NAME), DEFAULT_LOGO_NAME):
+        if os.path.isfile(p):
+            d = _file_to_data_url(p)
+            if d: return d
+    if MAP_LOGO_URL:
+        return MAP_LOGO_URL
+    return "/goodbirds_logo_text.png"
+
+def build_info_ui(radius_km: int, back_days: int, ts_display_et: str, logo_src: str) -> str:
+    logo_img = "<img src='{src}' alt='Goodbirds logo' style='height:100px;display:block;'>".format(src=logo_src)
+    html = """
+    <style>
+      .gb-info-btn {
+        position: fixed; left: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 50%;
+        background: #ffffff; border: 1px solid #999; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        z-index: 1201; display: flex; align-items: center; justify-content: center;
+        font: 700 18px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        cursor: pointer; user-select: none;
+      }
+      .gb-info-btn:focus { outline: 2px solid #2c7fb8; }
+      .gb-info-panel {
+        position: fixed; left: 16px; bottom: 70px; z-index: 1200;
+        background: rgba(255,255,255,0.98); border: 1px solid #999; border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3); padding: 12px; width: min(92vw, 360px);
+        max-height: 70vh; display: none;
+      }
+      .gb-info-header { display: grid; grid-template-columns: auto 1fr; grid-gap: 12px; align-items: center; }
+      .gb-info-title { font-weight: 700; font-size: 16px; margin: 0; }
+      .gb-info-meta { font-size: 13px; margin-top: 2px; }
+      .gb-info-row { margin-top: 6px; display: flex; gap: 12px; font-size: 12px; }
+
+      .leaflet-control-layers { max-height: 75vh; overflow: auto; }
+      .gb-layers-head {
+        display: flex; align-items: center; justify-content: space-between;
+        font: 600 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        padding: 4px 6px; border-bottom: 1px solid #ddd; margin-bottom: 4px;
+      }
+      .gb-layer-toggle {
+        border: 1px solid #999; border-radius: 4px; padding: 0 6px; font-size: 12px; cursor: pointer;
+        background: #fff;
+      }
+      .leaflet-control-layers-overlays label {
+        display: flex; align-items: center; gap: 6px; line-height: 1.2; margin-bottom: 4px;
+      }
+    </style>
+
+    <div class="gb-info-btn" id="gbInfoBtn" role="button" aria-label="Show map info" aria-expanded="false">i</div>
+
+    <div class="gb-info-panel" id="gbInfoPanel" aria-hidden="true">
+      <div class="gb-info-header">
+        <div>{logo_img}</div>
+        <div>
+          <h3 class="gb-info-title">{title}</h3>
+          <div class="gb-info-meta">eBird Notable · {radius} km radius · last {back} day(s)</div>
+          <div class="gb-info-row"><span>Built: {ts}</span> <a href="{archive}" target="_blank" rel="noopener">Archive</a></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function(){
+        var btn = document.getElementById('gbInfoBtn');
+        var panel = document.getElementById('gbInfoPanel');
+        function openPanel(){ panel.style.display='block'; btn.setAttribute('aria-expanded','true'); panel.setAttribute('aria-hidden','false'); }
+        function closePanel(){ panel.style.display='none'; btn.setAttribute('aria-expanded','false'); panel.setAttribute('aria-hidden','true'); }
+        btn.addEventListener('click', function(){ panel.style.display==='block' ? closePanel() : openPanel(); });
+        document.addEventListener('click', function(e){ if(!panel.contains(e.target) && e.target!==btn) closePanel(); });
+      })();
+    </script>
+    """.format(
+        logo_img=logo_img,
+        title=MAP_MAIN_TITLE,
+        radius=DEFAULT_RADIUS_KM,
+        back=BACK_DAYS,
+        ts=ts_display_et,
+        archive=ARCHIVE_URL,
+    )
+    return html
+
+def add_clear_species_control(m: folium.Map, species_names):
+    species_list = list(species_names or [])
+    js = f"""
+    <script>
+    (function(){{
+      var speciesSet = new Set({species_list!r});
+      function clearSpecies(){{
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if (!root) return;
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){{
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var name = label.textContent.trim();
+          if (speciesSet.has(name) && input.checked) input.click();
+        }});
+      }}
+      var ClearCtl = L.Control.extend({{
+        onAdd: function(map){{
+          var div = L.DomUtil.create('div','leaflet-bar');
+          div.style.background='white'; div.style.padding='4px 6px'; div.style.cursor='pointer';
+          div.style.font='12px/1.2 sans-serif'; div.style.boxShadow='0 1px 4px rgba(0,0,0,0.2)';
+          div.title='Uncheck all species layers'; div.innerHTML='Clear species';
+          L.DomEvent.on(div,'click',function(e){{ L.DomEvent.stop(e); clearSpecies(); }});
+          return div;
+        }},
+        onRemove: function(map){{}}
+      }});
+      function addWhenReady(){{
+        if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
+        (new ClearCtl({{position:'topright'}})).addTo({m.get_name()});
+      }}
+      addWhenReady();
+    }})();
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(js))
+
+def add_color_swatches_to_layer_control(m: folium.Map, species_to_color: OrderedDict):
+    mapping = dict(species_to_color)
+    js = f"""
+    <script>
+    (function(){{
+      var colorMap = {mapping!r};
+
+      function decorate(){{
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){{
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){{
+            if(root.style.display==='none'){{ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }}
+            else {{ root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }}
+          }});
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }}
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){{
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        }});
+        return true;
+      }}
+
+      function whenReady(){{ if(!decorate()) setTimeout(whenReady,200); }}
+      whenReady();
+    }})();
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(js))
+
+def prune_archive(dirpath: str, keep: int = 30) -> int:
+    try:
+        files = [f for f in os.listdir(dirpath)
+                 if f.startswith("ebird_radius_map_") and f.endswith(".html")]
+        files.sort(reverse=True)
+        to_remove = files[keep:]
+        for f in to_remove:
+            try:
+                os.remove(os.path.join(dirpath, f))
+            except Exception:
+                pass
+        return len(to_remove)
+    except Exception:
+        return 0
+
+def save_and_publish(m, outfile: str):
+    m.save(outfile)
+    print(f"Map saved as '{outfile}'")
+    latest_path = os.path.join(output_dir, "latest.html")
+    try:
+        import shutil
+        shutil.copyfile(outfile, latest_path)
+        print(f"Updated '{latest_path}'")
+    except Exception:
+        pass
+    removed = prune_archive(output_dir, KEEP_COUNT)
+    print(f"Archive pruning - kept {KEEP_COUNT}, removed {removed}")
+
+def make_map(lat=CENTER_LAT, lon=CENTER_LON, radius_km=DEFAULT_RADIUS_KM,
+             back_days=BACK_DAYS, zoom_start=ZOOM_START):
+    _, ts_display_et, ts_file_et = compute_dt_et()
+    outfile = os.path.join(output_dir, f"ebird_radius_map_{ts_file_et}_{radius_km}km.html")
+
+    data = get_data(lat, lon, radius_km, back_days)
+
+    m = folium.Map(location=[lat, lon], zoom_start=zoom_start, control_scale=True)
+
+    logo_src = get_logo_src()
+    m.get_root().html.add_child(folium.Element(build_info_ui(radius_km, back_days, ts_display_et, logo_src)))
+
+    add_radius_rings(m, lat, lon)
+    Fullscreen().add_to(m)
+    LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
+    MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
+
+    if not data:
+        add_notice(m, "No current notable birds for the selected window.")
+        add_clear_species_control(m, [])
+        save_and_publish(m, outfile)
+        return m, outfile
+
+    loc_species = defaultdict(lambda: defaultdict(list))
+    species_set = set()
+    for s in data:
+        slat = s.get("lat"); slon = s.get("lng")
+        sp = s.get("comName") or "Unknown"
+        species_set.add(sp)
+        loc_name = s.get("locName") or "Unknown location"
+        obs_date = s.get("obsDt") or ""
+        how_many = s.get("howMany", None)
+        checklist_id = s.get("subId") or ""
+        checklist_url = f"https://ebird.org/checklist/{checklist_id}" if checklist_id else ""
+        loc_species[(slat, slon)][sp].append({
+            "loc_name": loc_name,
+            "obs_date": obs_date,
+            "how_many": how_many,
+            "checklist_id": checklist_id,
+            "checklist_url": checklist_url,
+        })
+
+    species_to_color = OrderedDict(sorted([(sp, color_for_species(sp)) for sp in species_set], key=lambda x: x[0]))
+    too_many = len(species_to_color) > SPECIES_LAYER_THRESHOLD
+
+    def popup_html_for_entries(sp: str, loc_name: str, entries: list) -> str:
+        seen = set(); items = []
+        for e in entries:
+            cid = e["checklist_id"]
+            if cid in seen: continue
+            seen.add(cid)
+            count_txt = f" ({e['how_many']})" if e["how_many"] not in (None, "Unknown") else ""
+            if e["checklist_url"]:
+                items.append(f"<li><a href='{e['checklist_url']}' target='_blank' rel='noopener'>Checklist</a> – {e['obs_date']}{count_txt}</li>")
+            else:
+                items.append(f"<li>{e['obs_date']}{count_txt}</li>")
+        lst = "<ul style='margin:6px 0 0 16px; padding:0;'>" + "".join(items) + "</ul>" if items else "<div>No checklists.</div>"
+        return ("<div style='font-size:13px;'>"
+                f"<div><b>{sp}</b></div>"
+                f"<div><b>Location:</b> {loc_name}</div>"
+                "<div style='margin-top:6px; font-weight:600;'>Checklists:</div>"
+                f"{lst}</div>")
+
+    if not too_many:
+        species_groups = {}
+        for sp, hexcol in species_to_color.items():
+            fg = folium.FeatureGroup(name=sp, show=True)
+            cluster = MarkerCluster(name=f"{sp} markers")
+            fg.add_child(cluster)
+            species_groups[sp] = (fg, cluster)
+            m.add_child(fg)
+        for (slat, slon), species_dict in loc_species.items():
+            for sp, entries in species_dict.items():
+                hexcol = species_to_color.get(sp, "#444444")
+                loc_name = entries[0]["loc_name"]
+                popup_html = popup_html_for_entries(sp, loc_name, entries)
+                icon = folium.DivIcon(html=f"<div style='width:14px;height:14px;border-radius:50%;background:{hexcol};border:1.5px solid #222;'></div>",
+                                      icon_size=(14, 14), icon_anchor=(7, 7))
+                folium.Marker([slat, slon], icon=icon, tooltip=sp,
+                              popup=folium.Popup(popup_html, max_width=320)).add_to(species_groups[sp][1])
+        folium.LayerControl(collapsed=False).add_to(m)
+        add_clear_species_control(m, list(species_to_color.keys()))
+        add_color_swatches_to_layer_control(m, species_to_color)
+    else:
+        cluster = MarkerCluster(name="Notable sightings").add_to(m)
+        for (slat, slon), species_dict in loc_species.items():
+            for sp, entries in species_dict.items():
+                hexcol = species_to_color.get(sp, "#444444")
+                loc_name = entries[0]["loc_name"]
+                popup_html = popup_html_for_entries(sp, loc_name, entries)
+                icon = folium.DivIcon(html=f"<div style='width:14px;height:14px;border-radius:50%;background:{hexcol};border:1.5px solid #222;'></div>",
+                                      icon_size=(14, 14), icon_anchor=(7, 7))
+                folium.Marker([slat, slon], icon=icon, tooltip=sp,
+                              popup=folium.Popup(popup_html, max_width=320)).add_to(cluster)
+        folium.LayerControl(collapsed=False).add_to(m)
+        add_clear_species_control(m, list(species_to_color.keys()))
+        add_color_swatches_to_layer_control(m, species_to_color)
+
+    save_and_publish(m, outfile)
+    return m, outfile
+
+if __name__ == "__main__":
+    m, outfile = make_map(CENTER_LAT, CENTER_LON, DEFAULT_RADIUS_KM, BACK_DAYS)
+    if IN_NOTEBOOK and m:
+        display(m)
