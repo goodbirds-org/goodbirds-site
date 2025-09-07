@@ -1,4 +1,4 @@
-name: Build Goodbirds Maps (multi-city)
+name: Build Goodbirds Maps
 
 on:
   schedule:
@@ -9,16 +9,17 @@ on:
 permissions:
   contents: write
 
+# Prevent overlapping runs of this workflow from different commits
+concurrency:
+  group: build-maps
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Job-level env: define this ONCE
-    env:
-      LOGO_BASENAME: goodbirds_logo_text.png
-      MAP_LOGO_URL: https://goodbirds.org/goodbirds_logo_text.png
-
     strategy:
+      # Keep parallel for speed. Push step below rebases to avoid races.
       matrix:
         city:
           - slug: cambridge
@@ -28,7 +29,7 @@ jobs:
             ring_kms: "5,10,15,20"
             default_radius_km: "20"
             maps_subdir: "cambridge"
-            latest_href: "/maps/cambridge/latest.html"
+            latest_href: "maps/cambridge/latest.html"  # relative for Pages
           - slug: north-cambridge
             title: "North Cambridge, MA and Vicinity"
             center_lat: "42.400973"
@@ -36,7 +37,12 @@ jobs:
             ring_kms: "5,10,15"
             default_radius_km: "15"
             maps_subdir: "north-cambridge"
-            latest_href: "/maps/north-cambridge/latest.html"
+            latest_href: "maps/north-cambridge/latest.html"
+
+    # Job-level env used by multiple steps
+    env:
+      LOGO_BASENAME: goodbirds_logo_text.png
+      MAP_LOGO_URL: ./goodbirds_logo_text.png  # relative for Pages
 
     steps:
       - name: Checkout
@@ -49,27 +55,32 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euxo pipefail
+          python -V
+          pip -V
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Ensure docs directories exist
         run: |
+          set -euxo pipefail
           mkdir -p docs/maps/${{ matrix.city.maps_subdir }}
           mkdir -p docs/${{ matrix.city.slug }}
 
       - name: Copy logo into docs if present at repo root
         run: |
+          set -euxo pipefail
           if [ -f "${{ env.LOGO_BASENAME }}" ]; then
             cp "${{ env.LOGO_BASENAME }}" "docs/${{ env.LOGO_BASENAME }}"
           fi
 
       - name: Build map for ${{ matrix.city.title }}
-        env:                       # step-level env is fine
+        env:
           EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
           OUTPUT_DIR: docs/maps/${{ matrix.city.maps_subdir }}
-          MAP_LOGO_FILE: ${{ github.workspace }}/docs/goodbirds_logo_text.png
+          MAP_LOGO_FILE: ${{ github.workspace }}/docs/${{ env.LOGO_BASENAME }}
           MAP_LOGO_URL: ${{ env.MAP_LOGO_URL }}
-          ARCHIVE_URL: https://goodbirds.org/${{ matrix.city.slug }}/archive.html
+          ARCHIVE_URL: ${{ matrix.city.slug }}/archive.html     # relative in /docs
           MAP_MAIN_TITLE: ${{ matrix.city.title }}
           CENTER_LAT: ${{ matrix.city.center_lat }}
           CENTER_LON: ${{ matrix.city.center_lon }}
@@ -79,47 +90,90 @@ jobs:
           ZOOM_START: "11"
           RING_KMS: ${{ matrix.city.ring_kms }}
         run: |
+          set -euxo pipefail
+          python -m pip freeze
           python scripts/build_map.py
 
-      - name: Write /${{ matrix.city.slug }}/index.html redirect to latest map
-        env:                       # only ONE env for this step
-          LATEST: ${{ matrix.city.latest_href }}
+      - name: Write redirect /${{ matrix.city.slug }}/index.html to latest
+        env:
+          LATEST: ${{ matrix.city.latest_href }}    # already relative
         run: |
+          set -euxo pipefail
           cat > docs/${{ matrix.city.slug }}/index.html <<'HTML'
           <!doctype html>
-          <html>
-          <head>
           <meta charset="utf-8">
           <meta http-equiv="refresh" content="0; url=${LATEST}">
-          <title>Redirecting…</title>
-          </head>
-          <body>
-          <p>Redirecting to the latest Goodbirds map…</p>
-          </body>
-          </html>
+          <title>Redirecting</title>
+          <p>Redirecting to the latest Goodbirds map. If you are not redirected, <a href="${LATEST}">click here</a>.</p>
           HTML
 
-      - name: Build /${{ matrix.city.slug }}/archive.html (weekday labels)
+      - name: Build /${{ matrix.city.slug }}/archive.html
         env:
-          GIT_SHA: ${{ github.sha }}
           CITY_SLUG: ${{ matrix.city.slug }}
           CITY_TITLE: ${{ matrix.city.title }}
           MAPS_SUBDIR: ${{ matrix.city.maps_subdir }}
         run: |
+          set -euxo pipefail
           python - <<'PY'
-          # ... your Python block unchanged ...
+          import os, pathlib, datetime
+          from html import escape
+
+          city_slug = os.environ["CITY_SLUG"]
+          city_title = os.environ["CITY_TITLE"]
+          maps_subdir = os.environ["MAPS_SUBDIR"]
+
+          docs = pathlib.Path("docs")
+          maps_dir = docs / "maps" / maps_subdir
+          out = docs / city_slug / "archive.html"
+          items = sorted(maps_dir.glob("ebird_radius_map_*.html"))
+          def label(p):
+            # try to extract timestamp piece between map_ and _ET
+            name = p.name
+            try:
+              core = name.split("map_")[1].split(".html")[0]
+              return core.replace("_", " ")
+            except Exception:
+              return name
+
+          rows = "\n".join(
+            f'<li><a href="../maps/{maps_subdir}/{escape(p.name)}">{escape(label(p))}</a></li>'
+            for p in reversed(items)
+          )
+
+          out.write_text(f"""<!doctype html>
+          <meta charset="utf-8">
+          <title>{escape(city_title)} - Archive</title>
+          <h1>{escape(city_title)} - Archive</h1>
+          <ul>
+          {rows}
+          </ul>
+          """, encoding="utf-8")
           PY
 
-      - name: Commit and push city outputs
+      - name: Commit and push city outputs with rebase and retry
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Build maps for ${{ matrix.city.title }} into docs/maps/${{ matrix.city.maps_subdir }} and update pages"
-            git push
-          else
+          if git diff --cached --quiet; then
             echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Build maps for ${{ matrix.city.title }} into docs/maps/${{ matrix.city.maps_subdir }} and update pages"
+
+          branch="${BRANCH_NAME:-main}"
+          git fetch origin "$branch"
+          # Rebase to avoid non fast forward
+          git pull --rebase origin "$branch" || true
+
+          if ! git push origin "$branch"; then
+            git pull --rebase origin "$branch"
+            git push origin "$branch"
           fi
 
   landing:
@@ -129,8 +183,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Write landing page with both cities
+      - name: Write Pages landing index
         run: |
-          python - <<'PY'
-          # ... your Python block unchanged ...
-          PY
+          set -euxo pipefail
+          cat > docs/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Goodbirds Maps</title>
+          <h1>Goodbirds Maps</h1>
+          <ul>
+            <li><a href="maps/cambridge/latest.html">Cambridge, MA &amp; Vicinity</a></li>
+            <li><a href="maps/north-cambridge/latest.html">North Cambridge, MA and Vicinity</a></li>
+          </ul>
+          HTML
+
+      - name: Commit and push landing with rebase and retry
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No landing changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update landing index for GitHub Pages"
+          branch="${BRANCH_NAME:-main}"
+          git fetch origin "$branch"
+          git pull --rebase origin "$branch" || true
+
+          if ! git push origin "$branch"; then
+            git pull --rebase origin "$branch"
+            git push origin "$branch"
+          fi
