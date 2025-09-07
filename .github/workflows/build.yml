@@ -38,7 +38,6 @@ jobs:
             latest_href: "maps/north-cambridge/latest.html"
 
     env:
-      # Absolute base so links work when followed from goodbirds.org
       BASE_URL: https://goodbirds-org.github.io/goodbirds-site
       LOGO_BASENAME: goodbirds_logo_text.png
       MAP_LOGO_URL: ./goodbirds_logo_text.png
@@ -78,8 +77,8 @@ jobs:
           EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
           OUTPUT_DIR: docs/maps/${{ matrix.city.maps_subdir }}
           MAP_LOGO_FILE: ${{ github.workspace }}/docs/${{ env.LOGO_BASENAME }}
-          MAP_LOGO_URL: ${{ env.BASE_URL }}/${{ env.LOGO_BASENAME }}         # absolute for cross-origin links
-          ARCHIVE_URL: ${{ env.BASE_URL }}/${{ matrix.city.slug }}/archive.html  # absolute for cross-origin links
+          MAP_LOGO_URL: ${{ env.BASE_URL }}/${{ env.LOGO_BASENAME }}
+          ARCHIVE_URL: ${{ env.BASE_URL }}/${{ matrix.city.slug }}/archive.html
           MAP_MAIN_TITLE: ${{ matrix.city.title }}
           CENTER_LAT: ${{ matrix.city.center_lat }}
           CENTER_LON: ${{ matrix.city.center_lon }}
@@ -106,16 +105,15 @@ jobs:
           <p>If you are not redirected, <a href="${LATEST}">open the latest map</a>.</p>
           HTML
 
-      - - name: Build /${{ matrix.city.slug }}/archive.html
-  env:
-    CITY_SLUG: ${{ matrix.city.slug }}
-    CITY_TITLE: ${{ matrix.city.title }}
-    MAPS_SUBDIR: ${{ matrix.city.maps_subdir }}
-    BASE_URL: ${{ env.BASE_URL }}
-  run: |
-    set -euxo pipefail
-    python scripts/build_archive.py
-
+      - name: Build /${{ matrix.city.slug }}/archive.html
+        env:
+          CITY_SLUG: ${{ matrix.city.slug }}
+          CITY_TITLE: ${{ matrix.city.title }}
+          MAPS_SUBDIR: ${{ matrix.city.maps_subdir }}
+          BASE_URL: ${{ env.BASE_URL }}
+        run: |
+          set -euxo pipefail
+          python scripts/build_archive.py
 
       - name: Commit and push city outputs with rebase and retry
         env:
