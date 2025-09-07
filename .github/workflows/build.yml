@@ -9,7 +9,6 @@ on:
 permissions:
   contents: write
 
-# Prevent overlapping runs of this workflow from different commits
 concurrency:
   group: build-maps
   cancel-in-progress: false
@@ -19,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      # Keep parallel for speed. Push step below rebases to avoid races.
       matrix:
         city:
           - slug: cambridge
@@ -29,7 +27,7 @@ jobs:
             ring_kms: "5,10,15,20"
             default_radius_km: "20"
             maps_subdir: "cambridge"
-            latest_href: "maps/cambridge/latest.html"  # relative for Pages
+            latest_href: "maps/cambridge/latest.html"
           - slug: north-cambridge
             title: "North Cambridge, MA and Vicinity"
             center_lat: "42.400973"
@@ -39,10 +37,11 @@ jobs:
             maps_subdir: "north-cambridge"
             latest_href: "maps/north-cambridge/latest.html"
 
-    # Job-level env used by multiple steps
     env:
+      # Absolute base so links work when followed from goodbirds.org
+      BASE_URL: https://goodbirds-org.github.io/goodbirds-site
       LOGO_BASENAME: goodbirds_logo_text.png
-      MAP_LOGO_URL: ./goodbirds_logo_text.png  # relative for Pages
+      MAP_LOGO_URL: ./goodbirds_logo_text.png
 
     steps:
       - name: Checkout
@@ -79,8 +78,8 @@ jobs:
           EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
           OUTPUT_DIR: docs/maps/${{ matrix.city.maps_subdir }}
           MAP_LOGO_FILE: ${{ github.workspace }}/docs/${{ env.LOGO_BASENAME }}
-          MAP_LOGO_URL: ${{ env.MAP_LOGO_URL }}
-          ARCHIVE_URL: ${{ matrix.city.slug }}/archive.html     # relative in /docs
+          MAP_LOGO_URL: ${{ env.BASE_URL }}/${{ env.LOGO_BASENAME }}         # absolute for cross-origin links
+          ARCHIVE_URL: ${{ env.BASE_URL }}/${{ matrix.city.slug }}/archive.html  # absolute for cross-origin links
           MAP_MAIN_TITLE: ${{ matrix.city.title }}
           CENTER_LAT: ${{ matrix.city.center_lat }}
           CENTER_LON: ${{ matrix.city.center_lon }}
@@ -96,7 +95,7 @@ jobs:
 
       - name: Write redirect /${{ matrix.city.slug }}/index.html to latest
         env:
-          LATEST: ${{ matrix.city.latest_href }}    # already relative
+          LATEST: ${{ matrix.city.latest_href }}
         run: |
           set -euxo pipefail
           cat > docs/${{ matrix.city.slug }}/index.html <<'HTML'
@@ -104,51 +103,19 @@ jobs:
           <meta charset="utf-8">
           <meta http-equiv="refresh" content="0; url=${LATEST}">
           <title>Redirecting</title>
-          <p>Redirecting to the latest Goodbirds map. If you are not redirected, <a href="${LATEST}">click here</a>.</p>
+          <p>If you are not redirected, <a href="${LATEST}">open the latest map</a>.</p>
           HTML
 
-      - name: Build /${{ matrix.city.slug }}/archive.html
-        env:
-          CITY_SLUG: ${{ matrix.city.slug }}
-          CITY_TITLE: ${{ matrix.city.title }}
-          MAPS_SUBDIR: ${{ matrix.city.maps_subdir }}
-        run: |
-          set -euxo pipefail
-          python - <<'PY'
-          import os, pathlib, datetime
-          from html import escape
+      - - name: Build /${{ matrix.city.slug }}/archive.html
+  env:
+    CITY_SLUG: ${{ matrix.city.slug }}
+    CITY_TITLE: ${{ matrix.city.title }}
+    MAPS_SUBDIR: ${{ matrix.city.maps_subdir }}
+    BASE_URL: ${{ env.BASE_URL }}
+  run: |
+    set -euxo pipefail
+    python scripts/build_archive.py
 
-          city_slug = os.environ["CITY_SLUG"]
-          city_title = os.environ["CITY_TITLE"]
-          maps_subdir = os.environ["MAPS_SUBDIR"]
-
-          docs = pathlib.Path("docs")
-          maps_dir = docs / "maps" / maps_subdir
-          out = docs / city_slug / "archive.html"
-          items = sorted(maps_dir.glob("ebird_radius_map_*.html"))
-          def label(p):
-            # try to extract timestamp piece between map_ and _ET
-            name = p.name
-            try:
-              core = name.split("map_")[1].split(".html")[0]
-              return core.replace("_", " ")
-            except Exception:
-              return name
-
-          rows = "\n".join(
-            f'<li><a href="../maps/{maps_subdir}/{escape(p.name)}">{escape(label(p))}</a></li>'
-            for p in reversed(items)
-          )
-
-          out.write_text(f"""<!doctype html>
-          <meta charset="utf-8">
-          <title>{escape(city_title)} - Archive</title>
-          <h1>{escape(city_title)} - Archive</h1>
-          <ul>
-          {rows}
-          </ul>
-          """, encoding="utf-8")
-          PY
 
       - name: Commit and push city outputs with rebase and retry
         env:
@@ -157,20 +124,15 @@ jobs:
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-
           git commit -m "Build maps for ${{ matrix.city.title }} into docs/maps/${{ matrix.city.maps_subdir }} and update pages"
-
           branch="${BRANCH_NAME:-main}"
           git fetch origin "$branch"
-          # Rebase to avoid non fast forward
           git pull --rebase origin "$branch" || true
-
           if ! git push origin "$branch"; then
             git pull --rebase origin "$branch"
             git push origin "$branch"
@@ -204,18 +166,15 @@ jobs:
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add -A
           if git diff --cached --quiet; then
             echo "No landing changes to commit."
             exit 0
           fi
-
           git commit -m "Update landing index for GitHub Pages"
           branch="${BRANCH_NAME:-main}"
           git fetch origin "$branch"
           git pull --rebase origin "$branch" || true
-
           if ! git push origin "$branch"; then
             git pull --rebase origin "$branch"
             git push origin "$branch"
