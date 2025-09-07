@@ -190,41 +190,41 @@ def get_logo_src() -> str:
     return "/goodbirds_logo_text.png"
 
 def build_info_ui(radius_km: int, back_days: int, ts_display_et: str, logo_src: str) -> str:
-    logo_img = "<img src='{src}' alt='Goodbirds logo' style='height:100px;display:block;'>".format(src=logo_src)
-    html = """
+    logo_img = f"<img src='{logo_src}' alt='Goodbirds logo' style='height:100px;display:block;'>"
+    html = f"""
     <style>
-      .gb-info-btn {
+      .gb-info-btn {{
         position: fixed; left: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 50%;
         background: #ffffff; border: 1px solid #999; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
         z-index: 1201; display: flex; align-items: center; justify-content: center;
         font: 700 18px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         cursor: pointer; user-select: none;
-      }
-      .gb-info-btn:focus { outline: 2px solid #2c7fb8; }
-      .gb-info-panel {
+      }}
+      .gb-info-btn:focus {{ outline: 2px solid #2c7fb8; }}
+      .gb-info-panel {{
         position: fixed; left: 16px; bottom: 70px; z-index: 1200;
         background: rgba(255,255,255,0.98); border: 1px solid #999; border-radius: 10px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.3); padding: 12px; width: min(92vw, 360px);
         max-height: 70vh; display: none;
-      }
-      .gb-info-header { display: grid; grid-template-columns: auto 1fr; grid-gap: 12px; align-items: center; }
-      .gb-info-title { font-weight: 700; font-size: 16px; margin: 0; }
-      .gb-info-meta { font-size: 13px; margin-top: 2px; }
-      .gb-info-row { margin-top: 6px; display: flex; gap: 12px; font-size: 12px; }
+      }}
+      .gb-info-header {{ display: grid; grid-template-columns: auto 1fr; grid-gap: 12px; align-items: center; }}
+      .gb-info-title {{ font-weight: 700; font-size: 16px; margin: 0; }}
+      .gb-info-meta {{ font-size: 13px; margin-top: 2px; }}
+      .gb-info-row {{ margin-top: 6px; display: flex; gap: 12px; font-size: 12px; }}
 
-      .leaflet-control-layers { max-height: 75vh; overflow: auto; }
-      .gb-layers-head {
+      .leaflet-control-layers {{ max-height: 75vh; overflow: auto; }}
+      .gb-layers-head {{
         display: flex; align-items: center; justify-content: space-between;
         font: 600 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         padding: 4px 6px; border-bottom: 1px solid #ddd; margin-bottom: 4px;
-      }
-      .gb-layer-toggle {
+      }}
+      .gb-layer-toggle {{
         border: 1px solid #999; border-radius: 4px; padding: 0 6px; font-size: 12px; cursor: pointer;
         background: #fff;
-      }
-      .leaflet-control-layers-overlays label {
+      }}
+      .leaflet-control-layers-overlays label {{
         display: flex; align-items: center; gap: 6px; line-height: 1.2; margin-bottom: 4px;
-      }
+      }}
     </style>
 
     <div class="gb-info-btn" id="gbInfoBtn" role="button" aria-label="Show map info" aria-expanded="false">i</div>
@@ -233,32 +233,26 @@ def build_info_ui(radius_km: int, back_days: int, ts_display_et: str, logo_src: 
       <div class="gb-info-header">
         <div>{logo_img}</div>
         <div>
-          <h3 class="gb-info-title">{title}</h3>
-          <div class="gb-info-meta">eBird Notable · {radius} km radius · last {back} day(s)</div>
-          <div class="gb-info-row"><span>Built: {ts}</span> <a href="{archive}" target="_blank" rel="noopener">Archive</a></div>
+          <h3 class="gb-info-title">{MAP_MAIN_TITLE}</h3>
+          <div class="gb-info-meta">eBird Notable · {radius_km} km radius · last {back_days} day(s)</div>
+          <div class="gb-info-row"><span>Built: {ts_display_et}</span> <a href="{ARCHIVE_URL}" target="_blank" rel="noopener">Archive</a></div>
         </div>
       </div>
     </div>
 
     <script>
-      (function(){
+      (function(){{
         var btn = document.getElementById('gbInfoBtn');
         var panel = document.getElementById('gbInfoPanel');
-        function openPanel(){ panel.style.display='block'; btn.setAttribute('aria-expanded','true'); panel.setAttribute('aria-hidden','false'); }
-        function closePanel(){ panel.style.display='none'; btn.setAttribute('aria-expanded','false'); panel.setAttribute('aria-hidden','true'); }
-        btn.addEventListener('click', function(){ panel.style.display==='block' ? closePanel() : openPanel(); });
-        document.addEventListener('click', function(e){ if(!panel.contains(e.target) && e.target!==btn) closePanel(); });
-      })();
+        function openPanel(){{ panel.style.display='block'; btn.setAttribute('aria-expanded','true'); panel.setAttribute('aria-hidden','false'); }}
+        function closePanel(){{ panel.style.display='none'; btn.setAttribute('aria-expanded','false'); panel.setAttribute('aria-hidden','true'); }}
+        btn.addEventListener('click', function(){{ panel.style.display==='block' ? closePanel() : openPanel(); }});
+        document.addEventListener('click', function(e){{ if(!panel.contains(e.target) && e.target!==btn) closePanel(); }});
+      }})();
     </script>
-    """.format(
-        logo_img=logo_img,
-        title=MAP_MAIN_TITLE,
-        radius=DEFAULT_RADIUS_KM,
-        back=BACK_DAYS,
-        ts=ts_display_et,
-        archive=ARCHIVE_URL,
-    )
+    """
     return html
+
 
 def add_clear_species_control(m: folium.Map, species_names):
     species_list = list(species_names or [])
