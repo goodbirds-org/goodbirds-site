@@ -32,10 +32,18 @@ jobs:
             title: "North Cambridge, MA and Vicinity"
             center_lat: "42.400973"
             center_lon: "-71.135970"
-            ring_kms: "1,5,10"   # updated rings
+            ring_kms: "1,5,10"
             default_radius_km: "10"
             maps_subdir: "north-cambridge"
             latest_href: "maps/north-cambridge/latest.html"
+          - slug: manhattan
+            title: "Manhattan, NY & Vicinity"
+            center_lat: "40.780902"
+            center_lon: "-73.972943"
+            ring_kms: "1,5,10"
+            default_radius_km: "10"
+            maps_subdir: "manhattan"
+            latest_href: "maps/manhattan/latest.html"
 
     env:
       BASE_URL: https://goodbirds-org.github.io/goodbirds-site
@@ -93,6 +101,44 @@ jobs:
           set -euxo pipefail
           python -m pip freeze
           python scripts/build_map.py
+
+      # Always create a robust "latest" pointer and a JS redirector that busts cache
+      - name: Write latest pointer and JS redirect for ${{ matrix.city.title }}
+        env:
+          MAPS_DIR: docs/maps/${{ matrix.city.maps_subdir }}
+        run: |
+          set -euxo pipefail
+          latest_file="$(ls -1t "$MAPS_DIR"/ebird_radius_map_*.html | head -n1 | xargs -n1 basename)"
+          echo "$latest_file" > "$MAPS_DIR/latest.txt"
+          cat > "$MAPS_DIR/latest.html" <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Loading latest map…</title>
+          <noscript>
+            JavaScript is required to locate the latest map. Open <a href="latest.txt">latest.txt</a> and click the newest file.
+          </noscript>
+          <script>
+          (function(){
+            // Directory of this file
+            var base = location.href.replace(/[^\/]*$/, '');
+            // Fetch latest.txt with cache busting, then redirect
+            fetch('latest.txt?t=' + Date.now(), {cache: 'no-store'})
+              .then(function(r){ return r.text(); })
+              .then(function(name){
+                name = (name || '').trim();
+                if(!name) throw new Error('Empty latest.txt');
+                location.replace(base + encodeURIComponent(name));
+              })
+              .catch(function(err){
+                console.error('Failed to resolve latest map', err);
+                // Fallback: show a link to latest.txt so user can click through
+                var p = document.createElement('p');
+                p.innerHTML = 'Open <a href="latest.txt">latest.txt</a> for the current map.';
+                document.body.appendChild(p);
+              });
+          })();
+          </script>
+          HTML
 
       - name: Write /${{ matrix.city.slug }}/index.html redirect to latest
         run: |
@@ -177,7 +223,7 @@ jobs:
               .city h2{margin:2px 0 4px;font-size:20px;letter-spacing:.2px;}
               .city small{color:var(--muted);}
               .actions{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;}
-              .btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:8px 12px;text-decoration:none;font-size:14px;transition:background .12s ease,border-color .12s ease;}
+              .btn{appearance:none;border:1px solid var(--line);background:#fff;color:#111;border-radius:10px;padding:8px 12px;text-decoration:none;font-size:14px;transition:background .12s ease,border-color .12s ease;}
               .btn:hover{background:#f5f7fb;border-color:#d9e6f4;}
               .btn.primary{border-color:var(--accent);color:#0a2b42;}
               hr{border:0;border-top:1px solid var(--line);margin:28px 0;}
@@ -196,31 +242,43 @@ jobs:
                 </div>
               </header>
 
-                      <section class="grid" aria-label="Cities">
-          <!-- Cambridge -->
-          <article class="card">
-            <a class="city" href="https://goodbirds.org/maps/cambridge/latest.html">
-              <h2>Cambridge, MA</h2>
-              <small>Latest map</small>
-            </a>
-            <div class="actions">
-              <a class="btn primary" href="https://goodbirds.org/maps/cambridge/latest.html">Open latest map</a>
-              <a class="btn" href="cambridge/archive.html">Archive</a>
-            </div>
-          </article>
+              <section class="grid" aria-label="Cities">
+                <!-- Cambridge -->
+                <article class="card">
+                  <a class="city" href="https://goodbirds.org/maps/cambridge/latest.html">
+                    <h2>Cambridge, MA</h2>
+                    <small>Latest map</small>
+                  </a>
+                  <div class="actions">
+                    <a class="btn primary" href="https://goodbirds.org/maps/cambridge/latest.html">Open latest map</a>
+                    <a class="btn" href="cambridge/archive.html">Archive</a>
+                  </div>
+                </article>
 
-          <!-- North Cambridge -->
-          <article class="card">
-            <a class="city" href="https://goodbirds.org/maps/north-cambridge/latest.html">
-              <h2>North Cambridge, MA</h2>
-              <small>Latest map</small>
-            </a>
-            <div class="actions">
-              <a class="btn primary" href="https://goodbirds.org/maps/north-cambridge/latest.html">Open latest map</a>
-              <a class="btn" href="north-cambridge/archive.html">Archive</a>
-            </div>
-          </article>
-          </section>
+                <!-- North Cambridge -->
+                <article class="card">
+                  <a class="city" href="https://goodbirds.org/maps/north-cambridge/latest.html">
+                    <h2>North Cambridge, MA</h2>
+                    <small>Latest map</small>
+                  </a>
+                  <div class="actions">
+                    <a class="btn primary" href="https://goodbirds.org/maps/north-cambridge/latest.html">Open latest map</a>
+                    <a class="btn" href="north-cambridge/archive.html">Archive</a>
+                  </div>
+                </article>
+
+                <!-- Manhattan -->
+                <article class="card">
+                  <a class="city" href="manhattan/">
+                    <h2>Manhattan, NY</h2>
+                    <small>Latest map</small>
+                  </a>
+                  <div class="actions">
+                    <a class="btn primary" href="manhattan/">Open latest map</a>
+                    <a class="btn" href="manhattan/archive.html">Archive</a>
+                  </div>
+                </article>
+              </section>
 
               <hr>
 
