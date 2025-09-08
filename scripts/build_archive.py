@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import pathlib
 from html import escape
 from datetime import datetime, timedelta
@@ -22,34 +23,34 @@ out = docs / city_slug / "archive.html"
 items = sorted(maps_dir.glob("ebird_radius_map_*.html"))
 
 def parse_date_from_filename(name: str):
-    """Return a date from ebird_radius_map_YYYY-MM-DD_HH-MM-SS_ET_XXkm.html or None."""
+    """Return date from ebird_radius_map_YYYY-MM-DD_HH-MM-SS_*.html"""
     try:
-        core = name.split("map_")[1].split(".html")[0]  # YYYY-MM-DD_HH-MM-SS_ET_XXkm
-        date_str = core.split("_")[0]                   # YYYY-MM-DD
+        core = name.split("map_")[1].split(".html")[0]  # e.g. 2025-09-07_16-21-18_ET_15km
+        date_str = core.split("_")[0]                  # 2025-09-07
         return datetime.strptime(date_str, "%Y-%m-%d").date()
     except Exception:
         return None
 
+_time_rx = re.compile(r"_([0-2]\d)[-_]([0-5]\d)[-_]([0-5]\d)_")
+
 def parse_time_tuple(name: str):
-    """Return (HH, MM, SS) as ints from filename or (-1, -1, -1) if unknown."""
-    try:
-        core = name.split("map_")[1].split(".html")[0]
-        parts = core.split("_")  # [YYYY-MM-DD, HH, MM, SS, ET, XXkm]
-        hh = int(parts[1]); mm = int(parts[2]); ss = int(parts[3])
-        return (hh, mm, ss)
-    except Exception:
+    """
+    Return (HH, MM, SS) from filename.
+    Works for both HH-MM-SS and HH_MM_SS. Returns (-1, -1, -1) if not found.
+    """
+    m = _time_rx.search(name)
+    if not m:
         return (-1, -1, -1)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
 def time_label_from_filename(name: str) -> str:
-    """Return 'H:MM AM/PM' label from filename time."""
+    """Return 'H:MM AM/PM' label from filename time or 'Unknown time'."""
     hh, mm, ss = parse_time_tuple(name)
     if hh == -1:
         return "Unknown time"
-    # Build a dummy datetime to format as 12-hour time
     dt = datetime(2000, 1, 1, hh, mm, ss)
-    # %-I works on Unix, %#I on Windows
-    fmt_hour = "%-I:%M %p" if os.name != "nt" else "%#I:%M %p"
-    return dt.strftime(fmt_hour)
+    fmt = "%-I:%M %p" if os.name != "nt" else "%#I:%M %p"
+    return dt.strftime(fmt)
 
 # Group files by date key
 groups: dict[str, list[pathlib.Path]] = {}
@@ -58,19 +59,18 @@ for p in items:
     key = d.isoformat() if d else "unknown"
     groups.setdefault(key, []).append(p)
 
-# Keep only the most recent N days (in ET). Drop "unknown".
+# Keep only the most recent N days in ET. Drop "unknown".
 today_et = datetime.now(ZoneInfo("America/New_York")).date()
 min_date = today_et - timedelta(days=days_to_show - 1)
-filtered_keys = [k for k in groups.keys() if k != "unknown" and k >= min_date.isoformat()]
-ordered_keys = sorted(filtered_keys, reverse=True)  # newest day first
+keys = [k for k in groups.keys() if k != "unknown" and k >= min_date.isoformat()]
+ordered_keys = sorted(keys, reverse=True)  # newest day first
 
 # Build sections with newest time first within each day
 sections = []
 for k in ordered_keys:
-    files = sorted(groups[k], key=lambda p: parse_time_tuple(p.name), reverse=True)  # newest first
+    files = sorted(groups[k], key=lambda p: parse_time_tuple(p.name), reverse=True)
     dt = datetime.strptime(k, "%Y-%m-%d")
     heading = dt.strftime("%A, %B %-d, %Y") if os.name != "nt" else dt.strftime("%A, %B %#d, %Y")
-
     links = "\n".join(
         f'<li><a href="{base}/maps/{escape(maps_subdir)}/{escape(p.name)}">{escape(time_label_from_filename(p.name))}</a></li>'
         for p in files
@@ -130,4 +130,3 @@ html = f"""<!doctype html>
 
 out.write_text(html, encoding="utf-8")
 print(f"Wrote archive page to {out}")
-
