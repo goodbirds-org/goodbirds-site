@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Loading latest map…</title>
+<noscript>
+  JavaScript is required to locate the latest map. Open <a href="latest.txt">latest.txt</a> and click the newest file.
+</noscript>
+<script>
+(function(){
+  // Directory of this file
+  var base = location.href.replace(/[^\/]*$/, '');
+  // Fetch latest.txt with cache busting, then redirect
+  fetch('latest.txt?t=' + Date.now(), {cache: 'no-store'})
+    .then(function(r){ return r.text(); })
+    .then(function(name){
+      name = (name || '').trim();
+      if(!name) throw new Error('Empty latest.txt');
+      location.replace(base + encodeURIComponent(name));
+    })
+    .catch(function(err){
+      console.error('Failed to resolve latest map', err);
+      // Fallback: show a link to latest.txt so user can click through
+      var p = document.createElement('p');
+      p.innerHTML = 'Open <a href="latest.txt">latest.txt</a> for the current map.';
+      document.body.appendChild(p);
+    });
+})();
+</script>
