@@ -34,7 +34,10 @@ def parse_date_from_filename(name: str):
 _time_rx = re.compile(r"_([0-2]\d)[-_]([0-5]\d)[-_]([0-5]\d)_")
 
 def parse_time_tuple(name: str):
-    """Return (HH, MM, SS) from filename or (-1, -1, -1) if not found."""
+    """
+    Return (HH, MM, SS) from filename.
+    Works for both HH-MM-SS and HH_MM_SS. Returns (-1, -1, -1) if not found.
+    """
     m = _time_rx.search(name)
     if not m:
         return (-1, -1, -1)
@@ -83,8 +86,6 @@ latest_href = f"{base}/maps/{escape(maps_subdir)}/latest.html"
 html = f"""<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta http-equiv="Cache-Control" content="no-store, max-age=0">
-<meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(city_title)} - Archive</title>
 <style>
@@ -95,7 +96,7 @@ html = f"""<!doctype html>
                font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }}
   .wrap {{ max-width: 960px; margin: 32px auto; padding: 0 18px; }}
   .brand {{ display:flex; align-items:center; gap:12px; margin-bottom: 4px; }}
-  .brand img {{ height: 108px; }}  /* 50% larger than 72px */
+  .brand img {{ height: 72px; }}
   h1 {{ font-size: 26px; margin: 6px 0 0; }}
   .nav {{ margin: 8px 0 22px; display:flex; gap:10px; flex-wrap:wrap; }}
   .btn {{ text-decoration:none; color:#0a2b42; border:1px solid var(--line); background:#fff;
@@ -123,17 +124,6 @@ html = f"""<!doctype html>
 
     {sections_html}
   </main>
-
-  <script>
-  // One-time cache-busting reload so visitors see fresh content
-  (function(){
-    var u = new URL(window.location.href);
-    if(!u.searchParams.has('t')){
-      u.searchParams.set('t', Date.now());
-      window.location.replace(u.toString());
-    }
-  })();
-  </script>
 </body>
 </html>
 """
