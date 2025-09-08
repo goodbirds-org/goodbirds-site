@@ -50,20 +50,19 @@ for p in items:
 def sort_key(k: str):
     if k == "unknown":
         return (1, "")
-    return (0, k)  # strings compare lexicographically which works for YYYY-MM-DD
+    return (0, k)
 
 ordered_keys = sorted(groups.keys(), key=sort_key, reverse=True)
 
 # Build HTML rows grouped with <h2> per date
 sections = []
 for k in ordered_keys:
-    files = list(reversed(sorted(groups[k])))  # newest filename last in the day list? flip if you prefer
+    files = list(reversed(sorted(groups[k])))
     if k == "unknown":
         heading = "Unknown date"
     else:
         dt = datetime.strptime(k, "%Y-%m-%d")
         heading = dt.strftime("%A, %B %-d, %Y") if os.name != "nt" else dt.strftime("%A, %B %#d, %Y")
-        # %-d is not on Windows. %#d works on Windows.
     links = "\n".join(
         f'<li><a href="{base}/maps/{escape(maps_subdir)}/{escape(p.name)}">{escape(label_from_filename(p.name))}</a></li>'
         for p in files
@@ -88,7 +87,7 @@ html = f"""<!doctype html>
                font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }}
   .wrap {{ max-width: 960px; margin: 32px auto; padding: 0 18px; }}
   .brand {{ display:flex; align-items:center; gap:12px; margin-bottom: 10px; }}
-  .brand img {{ height: 48px; }}
+  .brand img {{ height: 72px; }}  /* was 48px */
   h1 {{ font-size: 26px; margin: 6px 0 0; }}
   .nav {{ margin: 8px 0 22px; }}
   .nav a {{ text-decoration:none; color:#0a2b42; border:1px solid var(--line); background:#fff;
