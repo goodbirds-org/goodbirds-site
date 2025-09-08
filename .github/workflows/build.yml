@@ -32,8 +32,8 @@ jobs:
             title: "North Cambridge, MA and Vicinity"
             center_lat: "42.400973"
             center_lon: "-71.135970"
-            ring_kms: "1,5,10"            # updated rings
-            default_radius_km: "15"       # unchanged per your ask
+            ring_kms: "1,5,10"   # updated rings
+            default_radius_km: "15"
             maps_subdir: "north-cambridge"
             latest_href: "maps/north-cambridge/latest.html"
 
@@ -95,17 +95,15 @@ jobs:
           python scripts/build_map.py
 
       - name: Write /${{ matrix.city.slug }}/index.html redirect to latest
-        env:
-          LATEST: ${{ matrix.city.latest_href }}   # relative for GitHub Pages
         run: |
           set -euxo pipefail
-          cat > docs/${{ matrix.city.slug }}/index.html <<'HTML'
+          cat > docs/${{ matrix.city.slug }}/index.html <<EOF
           <!doctype html>
           <meta charset="utf-8">
-          <meta http-equiv="refresh" content="0; url=${LATEST}">
+          <meta http-equiv="refresh" content="0; url=${{ matrix.city.latest_href }}">
           <title>Redirecting</title>
-          <p>If you are not redirected, <a href="${LATEST}">open the latest map</a>.</p>
-          HTML
+          <p>If you are not redirected, <a href="${{ matrix.city.latest_href }}">open the latest map</a>.</p>
+          EOF
 
       - name: Build /${{ matrix.city.slug }}/archive.html
         env:
@@ -200,7 +198,7 @@ jobs:
 
               <section class="grid" aria-label="Cities">
                 <article class="card">
-                  <a class="city" href="cambridge/">   <!-- defaults to latest via redirect file -->
+                  <a class="city" href="cambridge/">
                     <h2>Cambridge, MA</h2>
                     <small>Latest map</small>
                   </a>
