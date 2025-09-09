@@ -87,6 +87,10 @@ html = f"""<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, max-age=0, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta http-equiv="refresh" content="300">
 <title>{escape(city_title)} - Archive</title>
 <style>
   :root {{
@@ -124,6 +128,19 @@ html = f"""<!doctype html>
 
     {sections_html}
   </main>
+  <script>
+  (function(){{
+    /* If no cache-busting param, add one once */
+    if (!/[?&]t=/.test(location.search)) {{
+      location.replace(location.pathname + '?t=' + Date.now());
+      return;
+    }}
+    /* Then refresh every 5 minutes with a fresh timestamp */
+    setTimeout(function () {{
+      location.href = location.pathname + '?t=' + Date.now();
+    }}, 300000);
+  }})();
+  </script>
 </body>
 </html>
 """
