@@ -96,7 +96,7 @@ html = f"""<!doctype html>
                font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }}
   .wrap {{ max-width: 960px; margin: 32px auto; padding: 0 18px; }}
   .brand {{ display:flex; align-items:center; gap:12px; margin-bottom: 4px; }}
-  .brand img {{ height: 72px; }}
+  .brand img {{ height: 108px; }}
   h1 {{ font-size: 26px; margin: 6px 0 0; }}
   .nav {{ margin: 8px 0 22px; display:flex; gap:10px; flex-wrap:wrap; }}
   .btn {{ text-decoration:none; color:#0a2b42; border:1px solid var(--line); background:#fff;
