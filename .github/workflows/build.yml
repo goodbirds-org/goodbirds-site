@@ -140,16 +140,20 @@ jobs:
           </script>
           HTML
 
-      - name: Write /${{ matrix.city.slug }}/index.html redirect to latest
-        run: |
-          set -euxo pipefail
-          cat > docs/${{ matrix.city.slug }}/index.html <<EOF
-          <!doctype html>
-          <meta charset="utf-8">
-          <meta http-equiv="refresh" content="0; url=${{ matrix.city.latest_href }}">
-          <title>Redirecting</title>
-          <p>If you are not redirected, <a href="${{ matrix.city.latest_href }}">open the latest map</a>.</p>
-          EOF
+      - name: name: Write /${{ matrix.city.slug }}/index.html redirect to latest
+  run: |
+    set -euxo pipefail
+    cat > docs/${{ matrix.city.slug }}/index.html <<EOF
+    <!doctype html>
+    <meta charset="utf-8">
+    <!-- no-store hints + cache-busting -->
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="refresh" content="0; url=${{ matrix.city.latest_href }}?t=${{ github.run_id }}">
+    <title>Redirecting</title>
+    <p>If you are not redirected, <a href="${{ matrix.city.latest_href }}?t=${{ github.run_id }}">open the latest map</a>.</p>
+    EOF
 
       - name: Build /${{ matrix.city.slug }}/archive.html
         env:
@@ -213,7 +217,7 @@ jobs:
               html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
               .wrap{max-width:960px;margin:40px auto;padding:0 20px;}
               .brand{display:flex;align-items:center;gap:16px;}
-              .brand img{height:84px;}
+              .brand img{height:108px;}
               h1{font-size:28px;margin:12px 0 0;}
               p.lead{margin:10px 0 26px;color:var(--muted);font-size:17px;}
               .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
