@@ -33,23 +33,26 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
+      # Optional: first run as a dry run from the UI to verify latest.txt and screenshot
+      # - name: Dry run (no Bluesky post)
+      #   env:
+      #     MAP_URL: "https://goodbirds.org/maps/manhattan/latest.html"
+      #     LATEST_TXT_URL: "https://goodbirds.org/maps/manhattan/latest.txt"
+      #     POST_TEXT: "Latest notable bird sightings in Manhattan 🗽🐦 #ebird #nyc #birds"
+      #     ALT_TEXT: "Full-page screenshot of the most recent Manhattan GoodBirds map"
+      #     DRY_RUN: "1"
+      #   run: |
+      #     python scripts/capture_and_post_bsky.py
+
       - name: Post screenshot to Bluesky
         env:
-          # Stable launcher URL - the script will resolve the real page via latest.txt
           MAP_URL: "https://goodbirds.org/maps/manhattan/latest.html"
-          # Optional - only set if latest.txt lives elsewhere
-          # LATEST_TXT_URL: "https://goodbirds.org/maps/manhattan/latest.txt"
+          LATEST_TXT_URL: "https://goodbirds.org/maps/manhattan/latest.txt"
 
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
 
-          # Your caption, including hashtags and emoji
           POST_TEXT: "Latest notable bird sightings in Manhattan 🗽🐦 #ebird #nyc #birds"
           ALT_TEXT: "Full-page screenshot of the most recent Manhattan GoodBirds map"
-
-          # Optional tuning
-          # VIEWPORT_W: "1400"
-          # VIEWPORT_H: "900"
-          # WAIT_MS: "6000"
         run: |
           python scripts/capture_and_post_bsky.py
