@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-capture_and_post_bsky.py v1.4
+capture_and_post_bsky.py v1.5
 - Resolves latest.txt to find the real map page for screenshot
 - Posts the canonical MAP_URL (latest.html) in the text
-- Adds a rich-text facet so the URL is always clickable
+- Uses TextBuilder to add a clickable link facet for MAP_URL
+- Detects hashtags in POST_TEXT and adds tag facets
 - Optional DRY_RUN=1 to skip Bluesky login when testing
 """
 import os
@@ -15,7 +16,7 @@ from urllib.parse import urlparse, urljoin
 from urllib.request import Request, urlopen
 
 from playwright.sync_api import sync_playwright
-from atproto import Client, models
+from atproto import Client, models, client_utils
 
 
 def log(msg: str):
@@ -30,10 +31,7 @@ def fetch_text(url: str, timeout: int = 15) -> str:
 
 
 def derive_latest_txt_url(map_url: str) -> str | None:
-    """
-    If MAP_URL ends with .html, return same path with .txt.
-    Example: .../latest.html -> .../latest.txt
-    """
+    # .../latest.html -> .../latest.txt
     if map_url.lower().endswith(".html"):
         return re.sub(r"\.html$", ".txt", map_url, flags=re.IGNORECASE)
     return None
@@ -95,30 +93,34 @@ def screenshot_page(target: str, out_path: str, viewport_width=1400, viewport_he
     return out_path
 
 
-def make_link_facet(full_text: str, url: str) -> list | None:
+HASHTAG_RE = re.compile(r"#([A-Za-z0-9_]+)")
+
+def build_text_with_facets(post_text: str, map_url: str) -> tuple[str, list]:
     """
-    Create a Bluesky rich-text facet that marks the URL as a link.
-    Facets require byte offsets, not codepoint indexes.
+    Build the final post text and facets using TextBuilder:
+    - Preserve your caption text, turning #tags into tag facets
+    - Add a clickable link facet for map_url on a new line
     """
-    try:
-        start_char = full_text.index(url)
-    except ValueError:
-        return None
+    tb = client_utils.TextBuilder()
 
-    prefix = full_text[:start_char].encode("utf-8")
-    url_bytes = url.encode("utf-8")
-    byte_start = len(prefix)
-    byte_end = byte_start + len(url_bytes)
+    # Walk the caption and facet hashtags
+    idx = 0
+    for m in HASHTAG_RE.finditer(post_text):
+        if m.start() > idx:
+            tb.text(post_text[idx:m.start()])
+        tb.tag(m.group(1))
+        idx = m.end()
+    if idx < len(post_text):
+        tb.text(post_text[idx:])
 
-    link_feature = models.AppBskyRichtextFacet.Feature.Link(uri=url)
-    facet = models.AppBskyRichtextFacet.Main(
-        index=models.AppBskyRichtextFacet.ByteSlice(byte_start=byte_start, byte_end=byte_end),
-        features=[link_feature],
-    )
-    return [facet]
+    # New line, then link facet for the canonical latest.html
+    tb.text("\n")
+    tb.link(map_url, map_url)
+
+    return tb.build_text(), tb.build_facets()
 
 
-def post_to_bluesky(image_path: str, text: str, link_url: str, handle: str, app_password: str, alt_text: str = "Map screenshot"):
+def post_to_bluesky(image_path: str, text: str, facets: list, handle: str, app_password: str, alt_text: str = "Map screenshot"):
     client = Client()
 
     # Resolve handle for a clearer error early
@@ -130,19 +132,9 @@ def post_to_bluesky(image_path: str, text: str, link_url: str, handle: str, app_
     with open(image_path, "rb") as f:
         img_bytes = f.read()
 
-    upload = client.upload_blob(img_bytes)
-    images = [models.AppBskyEmbedImages.Image(alt=alt_text, image=upload.blob)]
-    embed = models.AppBskyEmbedImages.Main(images=images)
-
-    facets = make_link_facet(text, link_url)
-
-    record = models.AppBskyFeedPost.Record(
-        text=text,
-        facets=facets,   # guarantees the URL is a clickable link
-        embed=embed,
-        created_at=client.get_current_time_iso(),
-    )
-    client.app.bsky.feed.post.create(client.me.did, record)
+    # Use high-level helper that supports facets with an attached image
+    # Docs indicate facets can be passed with send_image and other helpers. :contentReference[oaicite:0]{index=0}
+    client.send_image(text=text, image=img_bytes, image_alt=alt_text, facets=facets)
 
 
 def getenv_int(name: str, default: int) -> int:
@@ -153,14 +145,14 @@ def getenv_int(name: str, default: int) -> int:
 
 
 def main():
-    log("[info] capture_and_post_bsky.py v1.4 starting")
+    log("[info] capture_and_post_bsky.py v1.5 starting")
 
     map_url = os.environ.get("MAP_URL") or (sys.argv[1] if len(sys.argv) > 1 else None)
     if not map_url:
         log("[fatal] Set MAP_URL or pass a URL or local HTML path as the first argument")
         sys.exit(2)
 
-    latest_txt_url = os.environ.get("LATEST_TXT_URL") or None  # optional
+    latest_txt_url = os.environ.get("LATEST_TXT_URL") or None  # optional explicit
     bsky_handle = os.environ.get("BSKY_HANDLE", "").strip()
     bsky_app_password = os.environ.get("BSKY_APP_PASSWORD", "").strip()
     post_text = os.environ.get("POST_TEXT", "Latest map")
@@ -183,8 +175,8 @@ def main():
     # Resolve the page to screenshot, but keep MAP_URL for posting
     effective_url = resolve_latest_map_url(map_url, latest_txt_url)
 
-    # Post text uses the canonical latest.html link
-    full_text = f"{post_text}\n{map_url}"
+    # Build text and facets using TextBuilder - this guarantees a proper link facet. :contentReference[oaicite:1]{index=1}
+    full_text, facets = build_text_with_facets(post_text, map_url)
 
     wait_ms = getenv_int("WAIT_MS", 5000)
     viewport_w = getenv_int("VIEWPORT_W", 1400)
@@ -204,10 +196,11 @@ def main():
         if dry_run:
             log("[info] DRY_RUN complete. Would post text:")
             log(full_text)
+            log(f"[info] Facets: {facets}")
             log(f"[info] Screenshot saved at: {out_path}")
             return
 
-        post_to_bluesky(out_path, full_text, map_url, bsky_handle, bsky_app_password, alt_text=alt_text)
+        post_to_bluesky(out_path, full_text, facets, bsky_handle, bsky_app_password, alt_text=alt_text)
 
     log("[info] Post complete")
 
