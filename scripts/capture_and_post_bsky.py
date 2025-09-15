@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-capture_and_post_bsky.py v1.5
+capture_and_post_bsky.py v1.6
 - Resolves latest.txt to find the real map page for screenshot
 - Posts the canonical MAP_URL (latest.html) in the text
 - Uses TextBuilder to add a clickable link facet for MAP_URL
-- Detects hashtags in POST_TEXT and adds tag facets
+- Facets hashtags correctly (TextBuilder.tag("#ebird", "ebird"))
 - Optional DRY_RUN=1 to skip Bluesky login when testing
 """
 import os
@@ -103,17 +103,21 @@ def build_text_with_facets(post_text: str, map_url: str) -> tuple[str, list]:
     """
     tb = client_utils.TextBuilder()
 
-    # Walk the caption and facet hashtags
     idx = 0
     for m in HASHTAG_RE.finditer(post_text):
+        # text before the hashtag
         if m.start() > idx:
             tb.text(post_text[idx:m.start()])
-        tb.tag(m.group(1))
+        tag_value = m.group(1)           # e.g., "ebird"
+        tag_text = "#" + tag_value       # literal text to render
+        tb.tag(tag_text, tag_value)      # <-- correct signature
         idx = m.end()
+
+    # trailing text after last hashtag
     if idx < len(post_text):
         tb.text(post_text[idx:])
 
-    # New line, then link facet for the canonical latest.html
+    # newline then the canonical latest.html link with a link facet
     tb.text("\n")
     tb.link(map_url, map_url)
 
@@ -132,8 +136,7 @@ def post_to_bluesky(image_path: str, text: str, facets: list, handle: str, app_p
     with open(image_path, "rb") as f:
         img_bytes = f.read()
 
-    # Use high-level helper that supports facets with an attached image
-    # Docs indicate facets can be passed with send_image and other helpers. :contentReference[oaicite:0]{index=0}
+    # Use helper that supports facets with an attached image
     client.send_image(text=text, image=img_bytes, image_alt=alt_text, facets=facets)
 
 
@@ -145,7 +148,7 @@ def getenv_int(name: str, default: int) -> int:
 
 
 def main():
-    log("[info] capture_and_post_bsky.py v1.5 starting")
+    log("[info] capture_and_post_bsky.py v1.6 starting")
 
     map_url = os.environ.get("MAP_URL") or (sys.argv[1] if len(sys.argv) > 1 else None)
     if not map_url:
@@ -175,7 +178,7 @@ def main():
     # Resolve the page to screenshot, but keep MAP_URL for posting
     effective_url = resolve_latest_map_url(map_url, latest_txt_url)
 
-    # Build text and facets using TextBuilder - this guarantees a proper link facet. :contentReference[oaicite:1]{index=1}
+    # Build text and facets using TextBuilder
     full_text, facets = build_text_with_facets(post_text, map_url)
 
     wait_ms = getenv_int("WAIT_MS", 5000)
