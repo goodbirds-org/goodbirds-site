@@ -144,8 +144,6 @@ def main():
             problems.append("BSKY_APP_PASSWORD is empty")
         if bsky_handle.startswith("@"):
             problems.append("BSKY_HANDLE should not start with '@'")
-        if bsky_app_password and "-" not in bsky_app_password:
-            problems.append("BSKY_APP_PASSWORD does not look like an App Password")
         if problems:
             raise SystemExit(f"[fatal] Config error: {'; '.join(problems)}")
     else:
