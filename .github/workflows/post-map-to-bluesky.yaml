@@ -1,0 +1,55 @@
+name: Post map screenshot to Bluesky
+
+on:
+  schedule:
+    - cron: "0 10 * * *"   # 06:00 ET during Daylight Time
+    - cron: "0 11 * * *"   # 06:00 ET during Standard Time
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Only run at 06:00 America/New_York
+        run: |
+          if [ "$(TZ=America/New_York date +%H)" != "06" ]; then
+            echo "Not 06:00 in New York. Exiting."
+            exit 0
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Post screenshot to Bluesky
+        env:
+          # Stable launcher URL - the script will resolve the real page via latest.txt
+          MAP_URL: "https://goodbirds.org/maps/manhattan/latest.html"
+          # Optional - only set if latest.txt lives elsewhere
+          # LATEST_TXT_URL: "https://goodbirds.org/maps/manhattan/latest.txt"
+
+          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+
+          # Your caption, including hashtags and emoji
+          POST_TEXT: "Latest notable bird sightings in Manhattan 🗽🐦 #ebird #nyc #birds"
+          ALT_TEXT: "Full-page screenshot of the most recent Manhattan GoodBirds map"
+
+          # Optional tuning
+          # VIEWPORT_W: "1400"
+          # VIEWPORT_H: "900"
+          # WAIT_MS: "6000"
+        run: |
+          python scripts/capture_and_post_bsky.py
