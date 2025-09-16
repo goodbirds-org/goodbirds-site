@@ -57,7 +57,7 @@ ROTATION = [
         "name": "Portland, OR",
         "map_url": "https://goodbirds.org/maps/portland-or/latest.html",
         "latest_txt_url": "https://goodbirds.org/maps/portland-or/latest.txt",
-        "post_text": "Latest notable bird sightings in Portland, OR 🌲🐦 #rosecity #pdx",
+        "post_text": "Latest notable bird sightings in Portland, OR 🌲🐦 #rosecity #pdx #ebird #birds",
         "alt_text": "Full-page screenshot of the most recent Portland, OR GoodBirds map",
     },
 ]
