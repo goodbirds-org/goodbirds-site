@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Goodbirds Coverage Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+  html, body { margin:0; height:100%; }
+  #map { width:100%; height:100%; }
+  .popup h3 { margin:0 0 6px 0; font:600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  .popup a { text-decoration: none; color: #0a2b42; }
+  .popup a:hover { color: #2c7fb8; }
+</style>
+<body>
+  <div id="map" aria-label="Map of cities covered by Goodbirds"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    async function loadCities() {
+      const r = await fetch('./cities.json?ts=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('Failed to load cities.json');
+      return r.json();
+    }
+    function addCity(map, bounds, c) {
+      const { lat, lon, title, latestUrl, maxRadiusKm } = c;
+      L.circle([lat, lon], { radius: maxRadiusKm * 1000, color: '#08519c', weight: 2, fill: false }).addTo(map);
+      const marker = L.circleMarker([lat, lon], { radius: 4, color: '#2c7fb8', fillColor: '#2c7fb8', fillOpacity: 1, weight: 1 }).addTo(map);
+      const safeTitle = String(title || '').replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]));
+      const html = `
+        <div class="popup">
+          <h3>${safeTitle}</h3>
+          <div>Coverage radius: ${maxRadiusKm} km</div>
+          <div style="margin-top:6px;">
+            <a href="${String(latestUrl || '')}" target="_blank" rel="noopener">Open latest map</a>
+          </div>
+        </div>`;
+      marker.bindPopup(html, { maxWidth: 260 });
+      bounds.extend([lat, lon]);
+      bounds.extend([lat + (maxRadiusKm / 111.0), lon]);
+    }
+    async function init() {
+      const cities = await loadCities();
+      const map = L.map('map', { scrollWheelZoom: true }).setView([39.5, -98.35], 4);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      const bounds = L.latLngBounds();
+      (cities || []).forEach(c => addCity(map, bounds, c));
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+    }
+    init().catch(() => {
+      document.getElementById('map').innerHTML = '<p style="padding:12px;font:14px system-ui;">Unable to load coverage map.</p>';
+    });
+  </script>
+</body>
+</html>
