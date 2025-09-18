@@ -2,8 +2,8 @@ name: Post map screenshot to Bluesky
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # 06:00 ET during Daylight Time
-    - cron: "0 11 * * *"   # 06:00 ET during Standard Time
+    - cron: "0 10 * * *"   # hits 06:00 ET during Daylight Time
+    - cron: "0 11 * * *"   # hits 06:00 ET during Standard Time
   workflow_dispatch:
 
 jobs:
@@ -12,40 +12,51 @@ jobs:
     permissions:
       contents: read
 
+    # Prevent overlapping runs (manual + scheduled) from racing
+    concurrency:
+      group: bluesky-daily
+      cancel-in-progress: true
+
     steps:
-      - name: Only run at 06:00 America/New_York
+      - id: timecheck
+        name: Decide whether to run at 06:00 America/New_York
         run: |
-          if [ "$(TZ=America/New_York date +%H)" != "06" ]; then
-            echo "Not 06:00 in New York. Exiting."
-            exit 0
+          NY_HOUR="$(TZ=America/New_York date +%H)"
+          if [ "$NY_HOUR" = "06" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "It is 06:00 in New York. Proceeding."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "It is $NY_HOUR:00 in New York. Skipping."
           fi
 
       - uses: actions/checkout@v4
+        if: steps.timecheck.outputs.run == 'true'
 
       - name: Set up Python
+        if: steps.timecheck.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install deps
+        if: steps.timecheck.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
       - name: Post rotating screenshot to Bluesky
+        if: steps.timecheck.outputs.run == 'true'
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
-
           # Optional tuning
           # VIEWPORT_W: "1400"
           # VIEWPORT_H: "900"
           # WAIT_MS: "6000"
-
           # Optional rotation tweak
           # ROTATION_OFFSET: "0"
-
           # Set DRY_RUN=1 to test without posting
           # DRY_RUN: "1"
         run: |
