@@ -60,6 +60,13 @@ ROTATION = [
         "post_text": "Latest notable bird sightings in Portland, OR 🌲🐦 #rosecity #pdx #ebird #birds",
         "alt_text": "Full-page screenshot of the most recent Portland, OR GoodBirds map",
     },
+    {
+        "name": "San Diego, CA",
+        "map_url": "https://goodbirds.org/maps/san-diego-ca/latest.html",
+        "latest_txt_url": "https://goodbirds.org/maps/san-diego-ca/latest.txt",
+        "post_text": "Latest notable bird sightings in San Diego, CA 🌊🐦⚡ #ebird #sandiego #birds",
+        "alt_text": "Full-page screenshot of the most recent San Diego GoodBirds map",
+    },
 ]
 # ---------------------------------
 
