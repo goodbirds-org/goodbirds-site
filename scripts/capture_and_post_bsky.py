@@ -135,6 +135,13 @@ def pick_rotation_item(rotation: list, ny_date: date, offset: int = 0) -> dict:
     idx = (ny_date.toordinal() + offset) % len(rotation)
     return rotation[idx]
 
+def pick_by_name(rotation: list, name: str) -> dict | None:
+    target = name.strip().lower()
+    for item in rotation:
+        if item["name"].lower() == target:
+            return item
+    return None
+
 def getenv_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, "").strip())
@@ -144,20 +151,14 @@ def getenv_int(name: str, default: int) -> int:
 def main():
     log("[info] capture_and_post_bsky.py v2.1 starting")
 
+    # Current date in New York for rotation
     if ZoneInfo:
         ny_now = datetime.now(ZoneInfo("America/New_York"))
     else:
         ny_now = datetime.utcnow()
     ny_date = ny_now.date()
 
-    rotation_offset = getenv_int("ROTATION_OFFSET", 0)
-    item = pick_rotation_item(ROTATION, ny_date, rotation_offset)
-    name = item["name"]
-    map_url = item["map_url"]
-    latest_txt_url = item.get("latest_txt_url")
-    post_text = item["post_text"]
-    alt_text = item["alt_text"]
-
+    # Bluesky config
     bsky_handle = os.environ.get("BSKY_HANDLE", "").strip()
     bsky_app_password = os.environ.get("BSKY_APP_PASSWORD", "").strip()
     dry_run = os.environ.get("DRY_RUN", "0").strip() == "1"
@@ -175,15 +176,36 @@ def main():
     else:
         log("[info] DRY_RUN=1. Will not contact Bluesky.")
 
+    # Choose rotation item, with optional force by name
+    force_city = os.environ.get("FORCE_CITY_NAME", "").strip()
+    if force_city:
+        item = pick_by_name(ROTATION, force_city)
+        if not item:
+            raise SystemExit(f"[fatal] FORCE_CITY_NAME '{force_city}' not found in ROTATION")
+        log(f"[info] Force city selected: {item['name']}")
+    else:
+        rotation_offset = getenv_int("ROTATION_OFFSET", 0)
+        item = pick_rotation_item(ROTATION, ny_date, rotation_offset)
+        log(f"[info] Rotation item selected: {item['name']}")
+
+    name = item["name"]
+    map_url = item["map_url"]
+    latest_txt_url = item.get("latest_txt_url")
+    post_text = item["post_text"]
+    alt_text = item["alt_text"]
+
+    # Resolve the actual dated page to screenshot; keep canonical latest.html for the post text
     effective_url = resolve_latest_map_url(map_url, latest_txt_url)
     full_text, facets = build_text_and_facets(post_text, map_url)
 
+    # Rendering and wait settings
     wait_ms = getenv_int("WAIT_MS", 5000)
     viewport_w = getenv_int("VIEWPORT_W", 1400)
     viewport_h = getenv_int("VIEWPORT_H", 900)
 
-    log(f"[info] Today: {ny_date} New York | Rotation item: {name}")
+    log(f"[info] Today: {ny_date} New York | Posting: {name}")
     log(f"[info] Screenshot source: {effective_url}")
+
     with tempfile.TemporaryDirectory() as td:
         out_path = os.path.join(td, "map.jpg")
         screenshot_page(
@@ -211,6 +233,7 @@ def main():
         client.send_image(text=full_text, image=img_bytes, image_alt=alt_text, facets=facets)
 
     log("[info] Post complete")
+
 
 if __name__ == "__main__":
     main()

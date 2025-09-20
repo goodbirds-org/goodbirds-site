@@ -2,9 +2,22 @@ name: Post map screenshot to Bluesky
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # hits 06:00 ET during Daylight Time
-    - cron: "0 11 * * *"   # hits 06:00 ET during Standard Time
+    - cron: "0 10 * * *"   # 06:00 ET during Daylight Time
+    - cron: "0 11 * * *"   # 06:00 ET during Standard Time
   workflow_dispatch:
+    inputs:
+      force_run:
+        description: "Bypass time guard and run now"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      city:
+        description: "Force a specific city (optional)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", "Manhattan", "Cambridge", "Chicago", "Portland, OR", "San Diego, CA"]
 
 jobs:
   post:
@@ -12,15 +25,20 @@ jobs:
     permissions:
       contents: read
 
-    # Prevent overlapping runs (manual + scheduled) from racing
     concurrency:
       group: bluesky-daily
       cancel-in-progress: true
 
     steps:
       - id: timecheck
-        name: Decide whether to run at 06:00 America/New_York
+        name: Decide whether to run
         run: |
+          FORCE="${{ github.event.inputs.force_run }}"
+          if [ "$FORCE" = "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Force run requested - bypassing time guard."
+            exit 0
+          fi
           NY_HOUR="$(TZ=America/New_York date +%H)"
           if [ "$NY_HOUR" = "06" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -51,13 +69,12 @@ jobs:
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
-          # Optional tuning
-          # VIEWPORT_W: "1400"
-          # VIEWPORT_H: "900"
-          # WAIT_MS: "6000"
-          # Optional rotation tweak
-          # ROTATION_OFFSET: "0"
-          # Set DRY_RUN=1 to test without posting
+
+          # If city input is set, force that city for this run
+          FORCE_CITY_NAME: ${{ github.event.inputs.city }}
+
+          # Optional debugging
           # DRY_RUN: "1"
+          # WAIT_MS: "8000"
         run: |
           python scripts/capture_and_post_bsky.py
