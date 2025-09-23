@@ -67,6 +67,27 @@ ROTATION = [
         "post_text": "Latest notable bird sightings in San Diego, CA 🌊🐦⚡ #ebird #sandiego #birds",
         "alt_text": "Full-page screenshot of the most recent San Diego GoodBirds map",
     },
+    {
+        "name": "Philadelphia",
+        "map_url": "https://goodbirds.org/maps/philadelphia/latest.html",
+        "latest_txt_url": "https://goodbirds.org/maps/philadelphia/latest.txt",
+        "post_text": "Latest notable bird sightings in Philadelphia 🔔🐦 #ebird #philadelphia #birds",
+        "alt_text": "Full-page screenshot of the most recent Philadelphia GoodBirds map",
+    },
+    {
+        "name": "Colorado Springs",
+        "map_url": "https://goodbirds.org/maps/colorado-springs/latest.html",
+        "latest_txt_url": "https://goodbirds.org/maps/colorado-springs/latest.txt",
+        "post_text": "Latest notable bird sightings in Colorado Springs 🏔️🐦 #ebird #coloradosprings #birds",
+        "alt_text": "Full-page screenshot of the most recent Colorado Springs GoodBirds map",
+    },
+    {
+        "name": "Greensboro",
+        "map_url": "https://goodbirds.org/maps/greensboro/latest.html",
+        "latest_txt_url": "https://goodbirds.org/maps/greensboro/latest.txt",
+        "post_text": "Latest notable bird sightings in Greensboro 🌳🐦 #ebird #greensboro #birds",
+        "alt_text": "Full-page screenshot of the most recent Greensboro GoodBirds map",
+    },
 ]
 # ---------------------------------
 
