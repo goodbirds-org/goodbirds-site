@@ -215,6 +215,14 @@ def main():
     post_text = item["post_text"]
     alt_text = item["alt_text"]
 
+    # Optional extra hashtag from GitHub Actions input
+    extra_tag = os.environ.get("EXTRA_HASHTAG", "").strip()
+    if extra_tag:
+        if not extra_tag.startswith("#"):
+            extra_tag = "#" + extra_tag
+        post_text = f"{post_text} {extra_tag}"
+
+
     # Resolve the actual dated page to screenshot; keep canonical latest.html for the post text
     effective_url = resolve_latest_map_url(map_url, latest_txt_url)
     full_text, facets = build_text_and_facets(post_text, map_url)
