@@ -215,6 +215,19 @@ def main():
     post_text = item["post_text"]
     alt_text = item["alt_text"]
 
+    # Optional direct overrides for special posts (e.g., cities_map.html)
+    force_map_url = os.environ.get("FORCE_MAP_URL", "").strip()
+    force_latest_txt_url = os.environ.get("FORCE_LATEST_TXT_URL", "").strip()
+    force_post_text = os.environ.get("FORCE_POST_TEXT", "").strip()
+    force_alt_text = os.environ.get("FORCE_ALT_TEXT", "").strip()
+    if force_map_url:
+        map_url = force_map_url
+        latest_txt_url = force_latest_txt_url or None
+    if force_post_text:
+        post_text = force_post_text
+    if force_alt_text:
+        alt_text = force_alt_text
+
     # Optional extra hashtag from GitHub Actions input
     extra_tag = os.environ.get("EXTRA_HASHTAG", "").strip()
     if extra_tag:

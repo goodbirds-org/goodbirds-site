@@ -1,0 +1,49 @@
+name: Post cities map to Bluesky - weekly
+
+on:
+  schedule:
+    - cron: "0 15 * * 1"  # 11:00 ET Monday during Daylight Time - adjust if you prefer
+  workflow_dispatch:
+    inputs:
+      extra_hashtag:
+        description: "Optional extra hashtags (space-separated)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  post-cities:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Post cities map to Bluesky
+        env:
+          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+
+          # Direct URL/text overrides - use the same posting script
+          FORCE_MAP_URL: "https://goodbirds.org/cities_map.html"
+          FORCE_POST_TEXT: "Explore all GoodBirds city maps 🗺️🐦 #ebird #birds #maps"
+          FORCE_ALT_TEXT: "Full-page screenshot of the GoodBirds cities map index"
+
+          # Optional extras
+          EXTRA_HASHTAG: ${{ github.event.inputs.extra_hashtag }}
+          # DRY_RUN: "1"   # uncomment to test without posting
+          # WAIT_MS: "7000"
+        run: |
+          python scripts/capture_and_post_bsky.py
