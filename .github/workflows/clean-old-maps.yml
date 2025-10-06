@@ -1,0 +1,51 @@
+name: Clean old maps
+
+on:
+  schedule:
+    - cron: "0 5 * * 2"   # 01:00 Tue EDT
+    - cron: "0 6 * * 2"   # 01:00 Tue EST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Only continue if it is 01:00 Tuesday in America/New_York
+        run: |
+          python - << 'PY'
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_ny = datetime.now(ZoneInfo("America/New_York"))
+          if not (now_ny.weekday() == 1 and now_ny.hour == 1):  # Tuesday and 01:00
+              print("Not 01:00 Tuesday in America/New_York - exiting")
+              raise SystemExit(78)
+          print("Guard check passed:", now_ny.isoformat())
+          PY
+
+      - name: Run cleaner
+        run: python scripts/clean_old_maps.py
+
+      - name: Commit and push deletions (if any)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "Remove map files older than 7 days"
+            git push
+          else
+            echo "No changes to commit"
