@@ -73,19 +73,25 @@ jobs:
           git status --porcelain=v1
           git diff --name-status
 
-      - name: Commit and push deletions (if any and not dry-run)
+      - name: Commit and push deletions
         if: steps.guard.outputs.run_ok == 'true' && inputs.dry_run != true
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet; then
-            git add -A
-            git commit -m "Remove map files older than 7 days"
-            git push
-          else
+          # Stage deletions if any
+          git add -A
+          if git diff --cached --quiet; then
             echo "No changes to commit"
+          else
+            git commit -m "Remove map files older than 7 days"
+            # Optional safety if others pushed meanwhile
+            git pull --rebase || true
+            git push
+          fi
 
-      - name: Post-check - fail if old files remain (only when not dry-run)
+      - name: Post-check - fail if old files remain
         if: steps.guard.outputs.run_ok == 'true' && inputs.dry_run != true
         run: |
           python - << 'PY'
