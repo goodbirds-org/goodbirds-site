@@ -1,3 +1,4 @@
+# .github/workflows/clean-old-maps.yml
 name: Clean old maps
 
 on:
@@ -5,6 +6,19 @@ on:
     - cron: "0 5 * * 2"   # 01:00 Tue EDT
     - cron: "0 6 * * 2"   # 01:00 Tue EST
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even if not Tuesday 01:00 America/New_York"
+        type: boolean
+        default: false
+      dry_run:
+        description: "List files but do not delete"
+        type: boolean
+        default: false
+      verbose:
+        description: "Verbose logging of matches"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -24,25 +38,30 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Time guard - set output if it is 01:00 Tuesday in America/New_York
+      - name: Time guard or force
         id: guard
         run: |
           python - << 'PY'
+          import os
           from datetime import datetime
           from zoneinfo import ZoneInfo
+          force = os.environ.get("INPUT_FORCE","false").lower() == "true"
           now_ny = datetime.now(ZoneInfo("America/New_York"))
-          should_run = now_ny.weekday() == 1 and now_ny.hour == 1
-          print(f"now_ny={now_ny.isoformat()} should_run={should_run}")
-          with open("$GITHUB_OUTPUT", "a") as f:
+          should_run = force or (now_ny.weekday() == 1 and now_ny.hour == 1)
+          print(f"now_ny={now_ny.isoformat()} force={force} should_run={should_run}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"run_ok={'true' if should_run else 'false'}\n")
           PY
 
       - name: Run cleaner
         if: steps.guard.outputs.run_ok == 'true'
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          VERBOSE: ${{ inputs.verbose }}
         run: python scripts/clean_old_maps.py
 
       - name: Commit and push deletions (if any)
-        if: steps.guard.outputs.run_ok == 'true'
+        if: steps.guard.outputs.run_ok == 'true' && inputs.dry_run != true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -52,8 +71,7 @@ jobs:
             git push
           else
             echo "No changes to commit"
-          fi
 
-      - name: Skipped due to timezone guard
+      - name: Skipped
         if: steps.guard.outputs.run_ok != 'true'
-        run: echo "Not 01:00 Tuesday in America/New_York - skipping without error"
+        run: echo "Skipped by time guard and force=false"
