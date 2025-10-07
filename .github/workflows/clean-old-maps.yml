@@ -39,12 +39,14 @@ jobs:
 
       - name: Time guard or force
         id: guard
+        env:
+          FORCE: ${{ inputs.force || 'false' }}
         run: |
           python - << 'PY'
           import os
           from datetime import datetime
           from zoneinfo import ZoneInfo
-          force = os.environ.get("INPUT_FORCE","false").lower() == "true"
+          force = os.environ.get("FORCE","false").lower() == "true"
           now_ny = datetime.now(ZoneInfo("America/New_York"))
           should_run = force or (now_ny.weekday() == 1 and now_ny.hour == 1)
           print(f"now_ny={now_ny.isoformat()} force={force} should_run={should_run}")
@@ -61,8 +63,8 @@ jobs:
       - name: Run cleaner
         if: steps.guard.outputs.run_ok == 'true'
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
-          VERBOSE: ${{ inputs.verbose }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          VERBOSE: ${{ inputs.verbose || 'true' }}
         run: python scripts/clean_old_maps.py
 
       - name: Show git changes
@@ -96,14 +98,14 @@ jobs:
           offenders = []
           for html in ROOT.glob("**/ebird_radius_map_*.html"):
             m = rx.match(html.name)
-            if not m: 
+            if not m:
               continue
             from datetime import datetime as dt
             file_date = dt.strptime(m.group(1), "%Y-%m-%d").date()
             if file_date < cutoff:
               offenders.append(str(html))
           if offenders:
-            print("Still-present old files (should have been deleted):")
+            print("Still-present old files:")
             for p in offenders:
               print(" -", p)
             sys.exit(2)
