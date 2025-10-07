@@ -24,22 +24,25 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Only continue if it is 01:00 Tuesday in America/New_York
+      - name: Time guard - set output if it is 01:00 Tuesday in America/New_York
+        id: guard
         run: |
           python - << 'PY'
           from datetime import datetime
           from zoneinfo import ZoneInfo
           now_ny = datetime.now(ZoneInfo("America/New_York"))
-          if not (now_ny.weekday() == 1 and now_ny.hour == 1):  # Tuesday and 01:00
-              print("Not 01:00 Tuesday in America/New_York - exiting")
-              raise SystemExit(78)
-          print("Guard check passed:", now_ny.isoformat())
+          should_run = now_ny.weekday() == 1 and now_ny.hour == 1
+          print(f"now_ny={now_ny.isoformat()} should_run={should_run}")
+          with open("$GITHUB_OUTPUT", "a") as f:
+              f.write(f"run_ok={'true' if should_run else 'false'}\n")
           PY
 
       - name: Run cleaner
+        if: steps.guard.outputs.run_ok == 'true'
         run: python scripts/clean_old_maps.py
 
       - name: Commit and push deletions (if any)
+        if: steps.guard.outputs.run_ok == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -49,3 +52,8 @@ jobs:
             git push
           else
             echo "No changes to commit"
+          fi
+
+      - name: Skipped due to timezone guard
+        if: steps.guard.outputs.run_ok != 'true'
+        run: echo "Not 01:00 Tuesday in America/New_York - skipping without error"
