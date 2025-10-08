@@ -89,14 +89,14 @@ ROTATION = [
         "alt_text": "Full-page screenshot of the most recent Greensboro GoodBirds map",
     },
     {
-        "name": "San Francisco, CA",
+        "name": "San Francisco",
         "map_url": "https://goodbirds.org/maps/san-francisco/latest.html",
         "latest_txt_url": "https://goodbirds.org/maps/san-francisco/latest.txt",
         "post_text": "Latest notable bird sightings in San Francisco, CA 🌁🐦 #ebird #sanfrancisco #birds",
         "alt_text": "Full-page screenshot of the most recent San Francisco GoodBirds map",
     },
     {
-        "name": "Tucson, AZ",
+        "name": "Tucson",
         "map_url": "https://goodbirds.org/maps/tucson/latest.html",
         "latest_txt_url": "https://goodbirds.org/maps/tucson/latest.txt",
         "post_text": "Latest notable bird sightings in Tucson, AZ 🌵🐦 #ebird #tucson #birds",
