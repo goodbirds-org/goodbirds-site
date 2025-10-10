@@ -6,22 +6,22 @@ on:
   workflow_dispatch:
     inputs:
       skip_commit:
-        description: "Do not write to the repo. Build files in the runner only. Good for tests."
+        description: "Do not write to the repo. Builds files in the runner only. Use for tests."
         type: boolean
         default: false
       mode:
-        description: "Which sightings to include. 'ABA-5 only' is strict. 'Union' also includes nationally scarce notables."
+        description: "What to include. 'aba5_only' is strict ABA Code-5 only. 'union' also includes nationally scarce notables."
         type: choice
         options:
           - aba5_only
           - union
         default: aba5_only
       back_days_recent:
-        description: "How many days of recent 'notable' records to pull (US+CA)."
+        description: "How many days of recent 'notable' records to fetch (US+CA). Keep small."
         type: string
         default: "1"
       per_species_max:
-        description: "Max markers to keep per species to keep the map fast."
+        description: "Max markers per species to keep the map fast."
         type: string
         default: "2"
 
@@ -63,50 +63,101 @@ jobs:
       - name: Extract ABA Code-5 species from ABA checklist
         run: |
           python - <<'PY'
-          import csv, json, pathlib
+          import csv, json, pathlib, sys, re
           aba = pathlib.Path("scripts/data/ABA_Checklist.csv")
           out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
+
+          CODE_KEYS = {"ABA Code","ABA code","Code","ABA_Code","Rarity Code","ABA Rarity Code"}
+          ENG_KEYS  = {"English Name","English name","PRIMARY_COM_NAME","Common Name","Name"}
+          SCI_KEYS  = {"Scientific Name","Scientific name","SCI_NAME","Scientific"}
+
+          def pick(fieldnames, candidates):
+              existing = {k.strip(): k for k in fieldnames}
+              for k in candidates:
+                  if k in existing:
+                      return existing[k]
+              return None
+
           rows = []
           with aba.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-              code = str(row.get("ABA Code") or row.get("Code") or "").strip()
-              if code == "5":
-                rows.append({
-                  "english": (row.get("English Name") or row.get("English name") or "").strip(),
-                  "sci": (row.get("Scientific Name") or row.get("Scientific name") or "").strip()
-                })
+              reader = csv.DictReader(f)
+              code_k = pick(reader.fieldnames, CODE_KEYS)
+              eng_k  = pick(reader.fieldnames, ENG_KEYS)
+              sci_k  = pick(reader.fieldnames, SCI_KEYS)
+              if not code_k or not (eng_k or sci_k):
+                  print("Headers found:", reader.fieldnames)
+                  sys.exit("Could not locate ABA Code and Name columns in ABA_Checklist.csv")
+
+              for r in reader:
+                  code_val = str(r.get(code_k, "")).strip()
+                  if re.match(r"^\s*5\b", code_val):   # accept 5, 5*, 5?, 5.0, etc.
+                      rows.append({
+                          "english": (r.get(eng_k, "") or "").strip(),
+                          "sci": (r.get(sci_k, "") or "").strip()
+                      })
+
           (out_dir / "aba5_raw.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
-          print(f"[info] Extracted {len(rows)} ABA-5 species")
+          print(f"[info] Extracted {len(rows)} ABA-5 rows from {aba}")
           PY
 
       - name: Resolve ABA-5 to eBird species codes
         run: |
           python - <<'PY'
-          import csv, json, pathlib
-          tax = pathlib.Path("scripts/data/eBird_taxonomy_v2024.csv")
+          import csv, json, pathlib, re, unicodedata
+
+          tax_path = pathlib.Path("scripts/data/eBird_taxonomy_v2024.csv")
           raw = json.loads(pathlib.Path("docs/mega/aba5_raw.json").read_text(encoding="utf-8"))
+
+          def norm(s):
+              s = (s or "").strip().lower()
+              s = unicodedata.normalize("NFKD", s)
+              s = s.replace("×", "x")
+              s = re.sub(r"\s+", " ", s)
+              return s
+
           by_sci, by_eng = {}, {}
-          with tax.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-              sci = (row.get("SCI_NAME") or "").strip().lower()
-              eng = (row.get("PRIMARY_COM_NAME") or "").strip().lower()
-              code = (row.get("SPECIES_CODE") or "").strip()
-              if sci and code: by_sci[sci] = code
-              if eng and code: by_eng[eng] = code
+          with tax_path.open(encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  sci = norm(row.get("SCI_NAME"))
+                  eng = norm(row.get("PRIMARY_COM_NAME"))
+                  code = (row.get("SPECIES_CODE") or "").strip()
+                  if code:
+                      if sci: by_sci[sci] = code
+                      if eng: by_eng[eng] = code
+
           matched, unresolved = [], []
           for rec in raw:
-            sci = (rec.get("sci") or "").strip().lower()
-            eng = (rec.get("english") or "").strip().lower()
-            code = by_sci.get(sci) or by_eng.get(eng)
-            if code: matched.append(code)
-            else: unresolved.append(rec)
+              sci = norm(rec.get("sci"))
+              eng = norm(rec.get("english"))
+              code = by_sci.get(sci) or by_eng.get(eng)
+              if code: matched.append(code)
+              else: unresolved.append(rec)
+
           matched = sorted(set(c for c in matched if c))
-          out_dir = pathlib.Path("docs/mega")
+          out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
           (out_dir / "aba5.json").write_text(json.dumps(matched, indent=2), encoding="utf-8")
           (out_dir / "aba5_unresolved.json").write_text(json.dumps(unresolved, indent=2), encoding="utf-8")
-          print(f"[info] Resolved {len(matched)} codes; {len(unresolved)} unresolved.")
+
+          print(f"[info] ABA-5 rows: {len(raw)}  -> matched codes: {len(matched)}  unresolved: {len(unresolved)}")
+          print("[info] First few codes:", json.dumps(matched[:10]))
+          PY
+
+      - name: Show ABA-5 resolve summary
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("docs/mega/aba5.json")
+          if p.exists():
+              data = json.loads(p.read_text(encoding="utf-8"))
+              print("aba5.json size:", len(data))
+          else:
+              print("aba5.json missing")
+          q = pathlib.Path("docs/mega/aba5_unresolved.json")
+          if q.exists():
+              txt = q.read_text(encoding="utf-8")
+              print("unresolved sample:", txt[:2000])
           PY
 
       - name: Build mega map
