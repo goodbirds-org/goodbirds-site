@@ -79,7 +79,15 @@ for o in candidates:
 
 print(f"[info] candidates={len(candidates)} megas={len(megas)}")
 
-m = folium.Map(location=[45, -96], zoom_start=4, tiles="CartoDB positron", control_scale=True)
+m = folium.Map(
+    location=[45, -96],
+    zoom_start=4,
+    tiles="OpenStreetMap",   # was "CartoDB positron"
+    control_scale=True,
+    width="100%",
+    height="600px",          # <- explicit height so it’s never 0
+)
+
 try:
     from folium.plugins import MarkerCluster
     layer = MarkerCluster(name="Megas").add_to(m)
