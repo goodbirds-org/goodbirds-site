@@ -1,0 +1,134 @@
+name: Build US+Canada Mega-Rarities Map
+
+'ons': &ons
+  schedule:
+    - cron: "13 9 * * *"   # Daily 09:13 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip commit/push; build only"
+        required: false
+        default: "false"   # string to avoid schema lint noise
+      force_build:
+        description: "Force rebuild even if no ABA changes"
+        required: false
+        default: "false"
+
+'on': *ons
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mega:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          pip install requests folium
+
+      - name: Ensure data files exist
+        run: |
+          set -euxo pipefail
+          test -f scripts/data/ABA_Checklist.csv
+          test -f scripts/data/eBird_taxonomy_v2024.csv
+          mkdir -p docs/mega
+
+      - name: Extract ABA Code-5 species
+        run: |
+          python - <<'PY'
+          import csv, json, pathlib
+          aba = pathlib.Path("scripts/data/ABA_Checklist.csv")
+          out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
+          rows = []
+          with aba.open(encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  code = str(row.get("ABA Code") or row.get("Code") or "").strip()
+                  if code == "5":
+                      rows.append({
+                          "english": (row.get("English Name") or row.get("English name") or "").strip(),
+                          "sci": (row.get("Scientific Name") or row.get("Scientific name") or "").strip()
+                      })
+          (out_dir / "aba5_raw.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
+          print(f"[info] Extracted {len(rows)} ABA-5 species")
+          PY
+
+      - name: Resolve ABA-5 species to eBird codes
+        run: |
+          python - <<'PY'
+          import csv, json, pathlib
+          tax = pathlib.Path("scripts/data/eBird_taxonomy_v2024.csv")
+          aba_raw = json.loads(pathlib.Path("docs/mega/aba5_raw.json").read_text(encoding="utf-8"))
+
+          by_sci, by_eng = {}, {}
+          with tax.open(encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  sci = (row.get("SCI_NAME") or "").strip().lower()
+                  eng = (row.get("PRIMARY_COM_NAME") or "").strip().lower()
+                  code = (row.get("SPECIES_CODE") or "").strip()
+                  if sci and code: by_sci[sci] = code
+                  if eng and code: by_eng[eng] = code
+
+          matched, unresolved = [], []
+          for rec in aba_raw:
+              sci = (rec.get("sci") or "").strip().lower()
+              eng = (rec.get("english") or "").strip().lower()
+              code = by_sci.get(sci) or by_eng.get(eng)
+              if code:
+                  matched.append(code)
+              else:
+                  unresolved.append(rec)
+
+          matched = sorted(set(c for c in matched if c))
+          out_dir = pathlib.Path("docs/mega")
+          (out_dir / "aba5.json").write_text(json.dumps(matched, indent=2), encoding="utf-8")
+          (out_dir / "aba5_unresolved.json").write_text(json.dumps(unresolved, indent=2), encoding="utf-8")
+          print(f"[info] Resolved {len(matched)} codes; {len(unresolved)} unresolved.")
+          PY
+
+      - name: Build mega map
+        env:
+          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+          MEGA_BACK_DAYS_RECENT: "2"
+          MEGA_BACK_DAYS_SCARCITY: "365"
+          MEGA_NATIONAL_MAX: "25"
+        run: |
+          set -euxo pipefail
+          python scripts/build_mega_map.py
+          echo "----- summary -----"
+          cat docs/mega/summary.json || true
+          echo "-------------------"
+
+      - name: Commit and push docs/mega
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/mega
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Build US+Canada mega-rarities map"
+            git pull --rebase || true
+            git push
+          fi
