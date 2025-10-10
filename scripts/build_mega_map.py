@@ -2,10 +2,9 @@
 """
 Goodbirds • Build a US+Canada Mega-Rarities map
 
-Selection:
-- MODE "aba5_only": include only sightings whose speciesCode is in docs/mega/aba5.json
-- MODE "union": include sightings that are ABA-5 OR have low national count in last 365 days
-  (national scarcity requires extra API calls)
+Selection modes:
+- MEGA_MODE="aba5_only"  -> include only sightings whose speciesCode is in docs/mega/aba5.json
+- MEGA_MODE="union"      -> include ABA-5 OR species with low national count in the last 365 days
 
 Env vars:
   EBIRD_API_KEY                required
@@ -13,10 +12,10 @@ Env vars:
   MEGA_BACK_DAYS_RECENT        recent-notables window, default "1"
   MEGA_BACK_DAYS_SCARCITY      365-day window for scarcity counts, default "365"
   MEGA_NATIONAL_MAX            scarcity cutoff, default "25"
-  MEGA_PER_SPECIES_MAX         cap markers per species to keep map light, default "2"
+  MEGA_PER_SPECIES_MAX         cap markers per species, default "2"
 """
 
-import os, time, json, pathlib, requests, folium
+import os, time, json, pathlib, requests, folium, re, unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -24,14 +23,14 @@ EBIRD_API = "https://api.ebird.org/v2"
 HEADERS = {"X-eBirdApiToken": os.environ["EBIRD_API_KEY"]}
 OUT_DIR = pathlib.Path("docs/mega"); OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-MODE                 = os.environ.get("MEGA_MODE", "aba5_only").strip().lower()
-BACK_DAYS_RECENT     = int(os.environ.get("MEGA_BACK_DAYS_RECENT", "1"))
-BACK_DAYS_SCARCITY   = int(os.environ.get("MEGA_BACK_DAYS_SCARCITY", "365"))
-NATIONAL_MAX         = int(os.environ.get("MEGA_NATIONAL_MAX", "25"))
-PER_SPECIES_MAX      = int(os.environ.get("MEGA_PER_SPECIES_MAX", "2"))
-COUNTRIES            = ["US", "CA"]
+MODE               = os.environ.get("MEGA_MODE", "aba5_only").strip().lower()
+BACK_DAYS_RECENT   = int(os.environ.get("MEGA_BACK_DAYS_RECENT", "1"))
+BACK_DAYS_SCARCITY = int(os.environ.get("MEGA_BACK_DAYS_SCARCITY", "365"))
+NATIONAL_MAX       = int(os.environ.get("MEGA_NATIONAL_MAX", "25"))
+PER_SPECIES_MAX    = int(os.environ.get("MEGA_PER_SPECIES_MAX", "2"))
+COUNTRIES          = ["US", "CA"]
 
-# Read ABA-5 list of speciesCodes, if present
+# Load ABA-5 species codes produced by the workflow
 ABA5_PATH = OUT_DIR / "aba5.json"
 aba5_codes = set()
 if ABA5_PATH.exists():
@@ -77,7 +76,7 @@ for c in COUNTRIES:
 seen, candidates = set(), []
 for o in notes:
     key = o.get("obsId") or f"{o.get('subId')}|{o.get('speciesCode')}"
-    if key in seen: 
+    if key in seen:
         continue
     seen.add(key)
     candidates.append(o)
@@ -87,7 +86,10 @@ print(f"[info] candidates={len(candidates)}")
 # 3) scarcity counts only if needed
 national_counts = {}
 if MODE != "aba5_only":
-    species_codes = sorted({o.get("speciesCode") for o in candidates if o.get("speciesCode")})
+    species_codes = sorted({
+        o.get("speciesCode") for o in candidates
+        if o.get("speciesCode") and o.get("speciesCode") not in aba5_codes
+    })
     for sc in species_codes:
         try:
             national_counts[sc] = national_species_count(sc)
@@ -130,6 +132,7 @@ m = folium.Map(
     width="100%",
     height="600px",
 )
+
 try:
     from folium.plugins import MarkerCluster
     layer = MarkerCluster(name="Megas").add_to(m)
@@ -177,7 +180,14 @@ for o in megas:
 
 folium.LayerControl().add_to(m)
 
-# 7) save artifacts
+# 7) ensure the page is not visually blank when no data
+if not megas:
+    from folium import Element
+    m.get_root().html.add_child(Element(
+        "<div style='padding:12px;font-family:system-ui'>No ABA Code-5 sightings in the last day.</div>"
+    ))
+
+# 8) save artifacts
 m.save(OUT_DIR / "index.html")
 summary = {
     "built_at_utc": datetime.now(timezone.utc).isoformat(),
