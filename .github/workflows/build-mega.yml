@@ -12,9 +12,7 @@ on:
       mode:
         description: "What to include. 'aba5_only' is strict ABA Code 5 only. 'union' also includes nationally scarce notables."
         type: choice
-        options:
-          - aba5_only
-          - union
+        options: [aba5_only, union]
         default: aba5_only
       back_days_recent:
         description: "How many days of recent 'notable' records to fetch for US and CA."
@@ -69,39 +67,60 @@ jobs:
           aba_path = pathlib.Path("scripts/data/ABA_Checklist.csv")
           raw_text = aba_path.read_text(encoding="utf-8", errors="replace")
 
-          # Find the first plausible header line
           lines = raw_text.splitlines()
           header_idx = None
+          sep = ","  # default; will switch to tab if needed
+
+          def looks_like_header(line, sep_char):
+            toks = [t.strip().strip('"').lower() for t in line.split(sep_char)]
+            if len(toks) < 3:
+              return False
+            has_code = any("code" in t for t in toks)
+            has_name = any("english" in t for t in toks) or any("scientific" in t for t in toks)
+            return has_code and has_name
+
+          # pass 1: find with commas
           for i, line in enumerate(lines):
-            l = line.lower()
-            if "aba" in l and "code" in l and (("english" in l) or ("scientific" in l)):
-              if line.count(",") >= 2:
-                header_idx = i
-                break
+            if line.count(",") >= 2 and looks_like_header(line, ","):
+              header_idx = i; sep = ","; break
+
+          # pass 2: try tabs if not found
+          if header_idx is None:
+            for i, line in enumerate(lines):
+              if line.count("\t") >= 2 and looks_like_header(line, "\t"):
+                header_idx = i; sep = "\t"; break
 
           if header_idx is None:
-            print("Could not find a CSV header row. First 3 lines:")
+            print("Could not find a CSV/TSV header row. First 3 lines:")
             print("\n".join(lines[:3]))
             sys.exit("Could not locate ABA Code and Name columns in ABA_Checklist.csv")
 
           trimmed = "\n".join(lines[header_idx:])
 
-          reader = csv.DictReader(io.StringIO(trimmed))
+          # Build a DictReader with the chosen separator
+          class FlexibleReader(csv.DictReader):
+            def __init__(self, s, delimiter):
+              super().__init__(io.StringIO(s), delimiter=delimiter)
 
-          CODE_KEYS = {"ABA Code","ABA code","Code","ABA_Code","Rarity Code","ABA Rarity Code"}
-          ENG_KEYS  = {"English Name","English name","PRIMARY_COM_NAME","Common Name","Name"}
-          SCI_KEYS  = {"Scientific Name","Scientific name","SCI_NAME","Scientific"}
+          reader = FlexibleReader(trimmed, delimiter=sep)
 
-          def pick(fieldnames, candidates):
-            existing = {k.strip(): k for k in fieldnames}
+          CODE_KEYS = {"aba code","code","aba_code","rarity code","aba rarity code"}
+          ENG_KEYS  = {"english name","primary_com_name","common name","name"}
+          SCI_KEYS  = {"scientific name","sci_name","scientific"}
+
+          # normalize header names once
+          header_map = {h: h for h in reader.fieldnames}
+          norm_header = {h.strip().lower(): h for h in reader.fieldnames}
+
+          def pick(candidates):
             for k in candidates:
-              if k in existing:
-                return existing[k]
+              if k in norm_header:
+                return norm_header[k]
             return None
 
-          code_k = pick(reader.fieldnames, CODE_KEYS)
-          eng_k  = pick(reader.fieldnames, ENG_KEYS)
-          sci_k  = pick(reader.fieldnames, SCI_KEYS)
+          code_k = pick(CODE_KEYS)
+          eng_k  = pick(ENG_KEYS)
+          sci_k  = pick(SCI_KEYS)
 
           if not code_k or not (eng_k or sci_k):
             print("Detected header:", reader.fieldnames)
@@ -109,17 +128,17 @@ jobs:
 
           rows = []
           for r in reader:
-            code_val = str(r.get(code_k,"")).strip()
-            if re.match(r"^\s*5\b", code_val):  # 5, 5*, 5?, 5.0, etc.
+            code_val = str(r.get(code_k, "")).strip()
+            if re.match(r"^\s*5\b", code_val):  # accept 5, 5*, 5?, 5.0, etc.
               rows.append({
-                "english": (r.get(eng_k,"") or "").strip(),
-                "sci": (r.get(sci_k,"") or "").strip()
+                "english": (r.get(eng_k, "") or "").strip(),
+                "sci": (r.get(sci_k, "") or "").strip()
               })
 
           out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
           (out_dir / "aba5_raw.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
 
-          print(f"[info] Header found on line {header_idx+1}: {reader.fieldnames}")
+          print(f"[info] Header found on line {header_idx+1} using delimiter {'TAB' if sep=='\\t' else 'COMMA'}")
           print(f"[info] Extracted {len(rows)} ABA Code 5 rows from {aba_path.name}")
           PY
 
