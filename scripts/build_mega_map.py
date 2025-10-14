@@ -1,204 +1,243 @@
 #!/usr/bin/env python3
 """
-Goodbirds • Build a US+Canada Mega-Rarities map
+Build docs/mega/aba5.json from an ABA checklist CSV and the eBird taxonomy CSV.
 
-Selection modes:
-- MEGA_MODE="aba5_only"  -> include only sightings whose speciesCode is in docs/mega/aba5.json
-- MEGA_MODE="union"      -> include ABA-5 OR species with low national count in the last 365 days
+Input expectations (flexible, robust to headers and preambles):
+- ABA checklist has a name column (e.g., "Common Name") and a numeric code column
+  (e.g., "ABA Checklist Code"), where 5 indicates Code-5.
+- Taxonomy has PRIMARY_COM_NAME and SPECIES_CODE.
 
-Env vars:
-  EBIRD_API_KEY                required
-  MEGA_MODE                    "aba5_only" (default) or "union"
-  MEGA_BACK_DAYS_RECENT        recent-notables window, default "1"
-  MEGA_BACK_DAYS_SCARCITY      365-day window for scarcity counts, default "365"
-  MEGA_NATIONAL_MAX            scarcity cutoff, default "25"
-  MEGA_PER_SPECIES_MAX         cap markers per species, default "2"
+Usage:
+  python scripts/prepare_aba5.py \
+    --aba data/ABA_Checklist.csv \
+    --tax data/eBird_taxonomy_v2024.csv \
+    --out docs/mega/aba5.json
+
+Optional:
+  --report artifacts/aba_match_report.csv
+  --suggest artifacts/aba_unmatched_suggestions.csv
+  --code 5
 """
 
-import os, time, json, pathlib, requests, folium, re, unicodedata
-from collections import defaultdict
-from datetime import datetime, timezone
+import argparse
+import json
+import re
+import sys
+import unicodedata
+from pathlib import Path
 
-EBIRD_API = "https://api.ebird.org/v2"
-HEADERS = {"X-eBirdApiToken": os.environ["EBIRD_API_KEY"]}
-OUT_DIR = pathlib.Path("docs/mega"); OUT_DIR.mkdir(parents=True, exist_ok=True)
+import pandas as pd
+from difflib import get_close_matches
 
-MODE               = os.environ.get("MEGA_MODE", "aba5_only").strip().lower()
-BACK_DAYS_RECENT   = int(os.environ.get("MEGA_BACK_DAYS_RECENT", "1"))
-BACK_DAYS_SCARCITY = int(os.environ.get("MEGA_BACK_DAYS_SCARCITY", "365"))
-NATIONAL_MAX       = int(os.environ.get("MEGA_NATIONAL_MAX", "25"))
-PER_SPECIES_MAX    = int(os.environ.get("MEGA_PER_SPECIES_MAX", "2"))
-COUNTRIES          = ["US", "CA"]
 
-# Load ABA-5 species codes produced by the workflow
-ABA5_PATH = OUT_DIR / "aba5.json"
-aba5_codes = set()
-if ABA5_PATH.exists():
-    try:
-        aba5_codes = set(json.loads(ABA5_PATH.read_text(encoding="utf-8")))
-    except Exception:
-        aba5_codes = set()
+def norm_text(s: str) -> str:
+    if s is None:
+        return ""
+    s2 = " ".join(str(s).strip().split())
+    s2 = unicodedata.normalize("NFKD", s2).encode("ascii", "ignore").decode("ascii")
+    return s2
 
-def get_json(url, params=None, sleep=0.25):
-    r = requests.get(url, headers=HEADERS, params=params or {}, timeout=30)
-    if r.status_code == 429:
-        time.sleep(1.0)
-        return get_json(url, params, sleep)
-    r.raise_for_status()
-    time.sleep(sleep)
-    return r.json()
 
-def recent_notable(country):
-    return get_json(
-        f"{EBIRD_API}/data/obs/{country}/recent/notable",
-        {"back": BACK_DAYS_RECENT, "detail": "full"}
-    )
+def expand_variants(name: str):
+    """'Common Name (AOS Name)' -> ['Common Name', 'AOS Name'] with normalization."""
+    if not name:
+        return []
+    s = str(name).strip()
+    out = []
+    main = re.split(r"\s*\(", s)[0].strip()
+    if main:
+        out.append(norm_text(main))
+    for m in re.finditer(r"\(([^)]+)\)", s):
+        alt = m.group(1).strip()
+        if alt:
+            out.append(norm_text(alt))
+    # de-dupe, keep order
+    seen, dedup = set(), []
+    for x in out:
+        if x and x not in seen:
+            seen.add(x)
+            dedup.append(x)
+    return dedup
 
-def national_species_count(species_code):
-    total = 0
-    for c in COUNTRIES:
-        obs = get_json(f"{EBIRD_API}/data/obs/{c}/recent/{species_code}",
-                       {"back": BACK_DAYS_SCARCITY})
-        total += len(obs)
-    return total
 
-print(f"[info] MODE={MODE} recent={BACK_DAYS_RECENT}d scarcity={BACK_DAYS_SCARCITY}d cutoff={NATIONAL_MAX} per_species_max={PER_SPECIES_MAX} aba5_size={len(aba5_codes)}")
+def normcol(c: str) -> str:
+    """Uppercase and strip non-alphanumerics for robust header matching."""
+    return re.sub(r"[^A-Z0-9]+", "", str(c).upper())
 
-# 1) fetch recent notables for US and CA
-notes = []
-for c in COUNTRIES:
-    try:
-        notes.extend(recent_notable(c))
-    except Exception as e:
-        print(f"[warn] failed fetching {c} notables: {e}")
 
-# 2) de-dupe by obsId or subId|speciesCode
-seen, candidates = set(), []
-for o in notes:
-    key = o.get("obsId") or f"{o.get('subId')}|{o.get('speciesCode')}"
-    if key in seen:
-        continue
-    seen.add(key)
-    candidates.append(o)
-
-print(f"[info] candidates={len(candidates)}")
-
-# 3) scarcity counts only if needed
-national_counts = {}
-if MODE != "aba5_only":
-    species_codes = sorted({
-        o.get("speciesCode") for o in candidates
-        if o.get("speciesCode") and o.get("speciesCode") not in aba5_codes
-    })
-    for sc in species_codes:
-        try:
-            national_counts[sc] = national_species_count(sc)
-        except Exception as e:
-            print(f"[warn] scarcity count failed for {sc}: {e}")
-            national_counts[sc] = 999999
-
-# 4) select megas
-megas = []
-for o in candidates:
-    sc = o.get("speciesCode")
-    if not sc:
-        continue
-    if MODE == "aba5_only":
-        if sc in aba5_codes:
-            megas.append(o)
-    else:
-        ncount = national_counts.get(sc, 999999)
-        if sc in aba5_codes or ncount <= NATIONAL_MAX:
-            megas.append(o)
-
-# 5) cap markers per species to keep HTML small
-if PER_SPECIES_MAX > 0:
-    newest_by_species = defaultdict(list)
-    # sort newest first by obsDt string
-    for o in sorted(megas, key=lambda x: x.get("obsDt", ""), reverse=True):
-        sc = o.get("speciesCode")
-        if len(newest_by_species[sc]) < PER_SPECIES_MAX:
-            newest_by_species[sc].append(o)
-    megas = [o for lst in newest_by_species.values() for o in lst]
-
-print(f"[info] megas_after_cap={len(megas)}")
-
-# 6) build map
-m = folium.Map(
-    location=[45, -96],
-    zoom_start=4,
-    tiles="OpenStreetMap",
-    control_scale=True,
-    width="100%",
-    height="600px",
-)
-
-try:
-    from folium.plugins import MarkerCluster
-    layer = MarkerCluster(name="Megas").add_to(m)
-except Exception:
-    layer = m
-
-def color_for(n, aba=False):
-    if aba: return "purple"
-    if n <= 5: return "darkred"
-    if n <= 10: return "red"
-    if n <= 25: return "orange"
-    return "gray"
-
-for o in megas:
-    lat, lng = o.get("lat"), o.get("lng")
-    if lat is None or lng is None:
-        continue
-    sp  = o.get("comName", "Unknown")
-    sc  = o.get("speciesCode", "")
-    loc = o.get("locName", "Unknown location")
-    dt  = o.get("obsDt", "")
-    sub = o.get("subId")
-    chk = f"https://ebird.org/checklist/{sub}" if sub else "https://ebird.org/home"
-    ncount = 0 if MODE == "aba5_only" else int(national_counts.get(sc, 0))
-    aba = sc in aba5_codes
-    note = " • ABA Code-5" if aba else ""
-    html = f"""
-    <div>
-      <b>{sp}</b>{note}<br>
-      {loc}<br>
-      <small>{dt}</small><br>
-      <small>US+CA 365-day obs: {ncount}</small><br>
-      <a href="{chk}" target="_blank" rel="noopener">Open checklist</a>
-    </div>
+def read_csv_with_preamble_trim(path: Path):
     """
-    folium.CircleMarker(
-        location=[lat, lng],
-        radius=7,
-        color=color_for(ncount, aba),
-        fill=True,
-        fill_opacity=0.9,
-        popup=folium.Popup(html, max_width=300),
-        tooltip=f"{sp} • {loc}",
-    ).add_to(layer)
+    Try normal read. If that fails to find useful headers, scan first ~100 rows
+    to locate a likely header row containing a name and an ABA code column.
+    """
+    # First pass: let pandas infer
+    try:
+        df = pd.read_csv(path, dtype=str)
+        return df
+    except Exception:
+        pass
 
-folium.LayerControl().add_to(m)
+    # Second pass: scan lines for a header
+    text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    header_idx = None
+    for i, line in enumerate(text[:150]):
+        # naive CSV split by comma; if tabs are present, split on tabs
+        parts = line.split("\t") if "\t" in line and "," not in line else line.split(",")
+        parts = [p.strip().strip('"') for p in parts]
+        keys = {normcol(p) for p in parts}
+        if any(k in keys for k in {"PRIMARYCOMNAME", "COMMONNAME", "ENGLISHNAME", "NAME"}) and \
+           any(k in keys for k in {"ABACHECKLISTCODE", "ABACODE", "CODE"}):
+            header_idx = i
+            break
 
-# 7) ensure the page is not visually blank when no data
-if not megas:
-    from folium import Element
-    m.get_root().html.add_child(Element(
-        "<div style='padding:12px;font-family:system-ui'>No ABA Code-5 sightings in the last day.</div>"
-    ))
+    if header_idx is None:
+        # fallback: return best-effort read and let later logic try to detect columns
+        return pd.read_csv(path, dtype=str, engine="python", sep=None)
 
-# 8) save artifacts
-m.save(OUT_DIR / "index.html")
-summary = {
-    "built_at_utc": datetime.now(timezone.utc).isoformat(),
-    "mode": MODE,
-    "recent_days": BACK_DAYS_RECENT,
-    "scarcity_days": BACK_DAYS_SCARCITY,
-    "national_max": NATIONAL_MAX,
-    "per_species_max": PER_SPECIES_MAX,
-    "aba5_size": len(aba5_codes),
-    "count_candidates": len(candidates),
-    "count_megas": len(megas),
-}
-(OUT_DIR / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-print("[done] wrote docs/mega/index.html and summary.json")
+    # Delimiter guess from the header row
+    raw = text[header_idx]
+    sep = "\t" if "\t" in raw and "," not in raw else ","
+
+    # Safe logging without backslash in f-string
+    delimiter = "TAB" if sep == "\t" else "COMMA"
+    print(f"[info] Header found on line {header_idx+1} using delimiter {delimiter}")
+
+    # Re-read from that row as header
+    df = pd.read_csv(path, dtype=str, header=header_idx, sep=sep, engine="python")
+    return df
+
+
+def detect_aba_columns(df: pd.DataFrame):
+    cols_map = {normcol(c): c for c in df.columns}
+
+    name_keys = {"PRIMARYCOMNAME", "COMMONNAME", "ENGLISHNAME", "NAME", "COMMONNAMEAOS"}
+    code_keys = {"ABACHECKLISTCODE", "ABACODE", "CODE"}
+
+    name_col = next((cols_map[k] for k in name_keys if k in cols_map), None)
+    code_col = next((cols_map[k] for k in code_keys if k in cols_map), None)
+
+    # If not found, try to guess: pick a texty column for name and a numeric 1..6 column for code
+    if not name_col:
+        text_candidates = []
+        for c in df.columns:
+            vals = df[c].dropna().astype(str).head(40).tolist()
+            if any(" " in v for v in vals):
+                text_candidates.append(c)
+        if text_candidates:
+            name_col = text_candidates[0]
+
+    if not code_col:
+        numeric_candidates = []
+        for c in df.columns:
+            v = pd.to_numeric(df[c], errors="coerce")
+            uniq = set(v.dropna().astype(int).unique().tolist())
+            if v.notna().mean() > 0.75 and uniq.issubset({1, 2, 3, 4, 5, 6}):
+                numeric_candidates.append(c)
+        if numeric_candidates:
+            code_col = numeric_candidates[0]
+
+    if not name_col or not code_col:
+        print("[error] Could not locate Name and ABA Code columns after trimming and normalization")
+        print("[debug] Raw header:", list(df.columns))
+        print("[debug] Normalized header:", list(cols_map.keys()))
+        raise SystemExit(1)
+
+    return name_col, code_col
+
+
+def load_taxonomy(tax_path: Path):
+    tax = pd.read_csv(tax_path, dtype=str)
+    req = {"PRIMARY_COM_NAME", "SPECIES_CODE"}
+    if not req.issubset(set(tax.columns)):
+        missing = sorted(req - set(tax.columns))
+        print(f"[error] Taxonomy missing columns: {missing}")
+        raise SystemExit(1)
+    tax["_norm_name"] = tax["PRIMARY_COM_NAME"].map(norm_text)
+    return tax
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--aba", required=True, type=Path, help="ABA checklist CSV")
+    ap.add_argument("--tax", required=True, type=Path, help="eBird taxonomy CSV")
+    ap.add_argument("--out", required=True, type=Path, help="Output aba5.json path")
+    ap.add_argument("--report", type=Path, default=None, help="Optional: write a CSV match report")
+    ap.add_argument("--suggest", type=Path, default=None, help="Optional: write fuzzy suggestions CSV")
+    ap.add_argument("--code", default="5", help="ABA code to select (default 5)")
+    args = ap.parse_args()
+
+    # Read inputs
+    aba_df = read_csv_with_preamble_trim(args.aba)
+    tax_df = load_taxonomy(args.tax)
+
+    # Detect columns
+    name_col, code_col = detect_aba_columns(aba_df)
+    print(f"[info] Using name column: {name_col} | code column: {code_col}")
+
+    # Build lookup from taxonomy
+    name_to_code = dict(zip(tax_df["_norm_name"], tax_df["SPECIES_CODE"].str.lower()))
+
+    # Match ABA names to species codes
+    rows = []
+    unmatched = []
+    for _, r in aba_df.iterrows():
+        nm_raw = r.get(name_col)
+        code_raw = r.get(code_col)
+        variants = expand_variants(nm_raw)
+        found = None
+        for v in variants:
+            found = name_to_code.get(v)
+            if found:
+                break
+        rows.append(
+            {
+                "ABA_ROW_NAME": nm_raw,
+                "ABA_CODE": str(code_raw) if code_raw is not None else None,
+                "MATCH_VARIANT": variants[0] if variants else None,
+                "SPECIES_CODE": found,
+            }
+        )
+        if found is None and nm_raw not in (None, ""):
+            unmatched.append(nm_raw)
+
+    res = pd.DataFrame(rows)
+
+    # Filter to requested code
+    sel = res[res["ABA_CODE"].astype(str).str.strip() == args.code] if "ABA_CODE" in res.columns else res
+    codes = sorted(set(sel["SPECIES_CODE"].dropna().tolist()))
+
+    # Write outputs
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(codes, indent=2), encoding="utf-8")
+
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        res.to_csv(args.report, index=False, encoding="utf-8")
+
+    if args.suggest:
+        # simple fuzzy suggestions for unmatched names
+        tax_names = tax_df["PRIMARY_COM_NAME"].dropna().unique().tolist()
+        tax_norm = [" ".join(n.strip().split()).lower() for n in tax_names]
+        inv_norm = dict(zip(tax_norm, tax_names))
+        sugg_rows = []
+        for name in sorted(set(unmatched)):
+            n = " ".join(str(name).strip().split()).lower()
+            if not n:
+                continue
+            matches = get_close_matches(n, tax_norm, n=3, cutoff=0.7)
+            for m in matches:
+                sugg_rows.append({"ABA_ROW_NAME": name, "Suggested_MATCH": inv_norm[m]})
+        pd.DataFrame(sugg_rows).drop_duplicates().to_csv(args.suggest, index=False, encoding="utf-8")
+
+    print(f"[ok] matched {res['SPECIES_CODE'].notna().sum()} of {len(res)} rows")
+    print(f"[ok] wrote {len(codes)} Code-{args.code} species codes to {args.out}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except SystemExit as e:
+        sys.exit(e.code)
+    except Exception as ex:
+        print(f"[error] {ex}")
+        sys.exit(1)
