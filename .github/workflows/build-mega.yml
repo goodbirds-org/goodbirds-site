@@ -6,16 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       skip_commit:
-        description: "Do not write to the repo. Builds files in the runner only. Use for tests."
+        description: "Do not write to the repo (for testing only)."
         type: boolean
         default: false
       mode:
-        description: "What to include. 'aba5_only' is strict ABA Code 5 only. 'union' also includes nationally scarce notables."
+        description: "Map mode: 'aba5_only' (strict ABA Code 5) or 'union' (include national scarcities)."
         type: choice
         options: [aba5_only, union]
         default: aba5_only
       back_days_recent:
-        description: "How many days of recent 'notable' records to fetch for US and CA."
+        description: "Days of recent 'notable' records to fetch for US and CA."
         type: string
         default: "1"
       per_species_max:
@@ -50,157 +50,37 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --upgrade pip
-          pip install requests folium
+          pip install pandas requests folium jq
 
-      - name: Ensure data files exist
+      - name: Ensure input data exists
         run: |
           set -euxo pipefail
           test -f scripts/data/ABA_Checklist.csv
           test -f scripts/data/eBird_taxonomy_v2024.csv
           mkdir -p docs/mega
 
-      - name: Extract ABA Code 5 species from ABA checklist
-        run: |
-          python - <<'PY'
-          import csv, json, pathlib, sys, re, io
-
-          aba_path = pathlib.Path("scripts/data/ABA_Checklist.csv")
-          raw_text = aba_path.read_text(encoding="utf-8", errors="replace")
-
-          lines = raw_text.splitlines()
-          header_idx = None
-          sep = ","  # default; will switch to tab if needed
-
-          def looks_like_header(line, sep_char):
-            toks = [t.strip().strip('"').lower() for t in line.split(sep_char)]
-            if len(toks) < 3:
-              return False
-            has_code = any("code" in t for t in toks)
-            has_name = any("english" in t for t in toks) or any("scientific" in t for t in toks)
-            return has_code and has_name
-
-          # pass 1: find with commas
-          for i, line in enumerate(lines):
-            if line.count(",") >= 2 and looks_like_header(line, ","):
-              header_idx = i; sep = ","; break
-
-          # pass 2: try tabs if not found
-          if header_idx is None:
-            for i, line in enumerate(lines):
-              if line.count("\t") >= 2 and looks_like_header(line, "\t"):
-                header_idx = i; sep = "\t"; break
-
-          if header_idx is None:
-            print("Could not find a CSV/TSV header row. First 3 lines:")
-            print("\n".join(lines[:3]))
-            sys.exit("Could not locate ABA Code and Name columns in ABA_Checklist.csv")
-
-          trimmed = "\n".join(lines[header_idx:])
-
-          # Build a DictReader with the chosen separator
-          class FlexibleReader(csv.DictReader):
-            def __init__(self, s, delimiter):
-              super().__init__(io.StringIO(s), delimiter=delimiter)
-
-          reader = FlexibleReader(trimmed, delimiter=sep)
-
-          CODE_KEYS = {"aba code","code","aba_code","rarity code","aba rarity code"}
-          ENG_KEYS  = {"english name","primary_com_name","common name","name"}
-          SCI_KEYS  = {"scientific name","sci_name","scientific"}
-
-          # normalize header names once
-          norm_header = {h.strip().lower(): h for h in reader.fieldnames}
-
-          def pick(candidates):
-            for k in candidates:
-              if k in norm_header:
-                return norm_header[k]
-            return None
-
-          code_k = pick(CODE_KEYS)
-          eng_k  = pick(ENG_KEYS)
-          sci_k  = pick(SCI_KEYS)
-
-          if not code_k or not (eng_k or sci_k):
-            print("Detected header:", reader.fieldnames)
-            sys.exit("Could not locate ABA Code and Name columns after trimming preamble")
-
-          rows = []
-          for r in reader:
-            code_val = str(r.get(code_k, "")).strip()
-            if re.match(r"^\s*5\b", code_val):  # accept 5, 5*, 5?, 5.0, etc.
-              rows.append({
-                "english": (r.get(eng_k, "") or "").strip(),
-                "sci": (r.get(sci_k, "") or "").strip()
-              })
-
-          out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
-          (out_dir / "aba5_raw.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
-
-          label = "TAB" if sep == "\t" else "COMMA"
-          print(f"[info] Header found on line {header_idx+1} using delimiter {label}")
-          print(f"[info] Extracted {len(rows)} ABA Code 5 rows from {aba_path.name}")
-          PY
-
-      - name: Resolve ABA Code 5 to eBird species codes
-        run: |
-          python - <<'PY'
-          import csv, json, pathlib, re, unicodedata
-
-          tax_path = pathlib.Path("scripts/data/eBird_taxonomy_v2024.csv")
-          raw = json.loads(pathlib.Path("docs/mega/aba5_raw.json").read_text(encoding="utf-8"))
-
-          def norm(s):
-            s = (s or "").strip().lower()
-            s = unicodedata.normalize("NFKD", s)
-            s = s.replace("×", "x")
-            s = re.sub(r"\s+", " ", s)
-            return s
-
-          by_sci, by_eng = {}, {}
-          with tax_path.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-              sci = norm(row.get("SCI_NAME"))
-              eng = norm(row.get("PRIMARY_COM_NAME"))
-              code = (row.get("SPECIES_CODE") or "").strip()
-              if code:
-                if sci: by_sci[sci] = code
-                if eng: by_eng[eng] = code
-
-          matched, unresolved = [], []
-          for rec in raw:
-            sci = norm(rec.get("sci"))
-            eng = norm(rec.get("english"))
-            code = by_sci.get(sci) or by_eng.get(eng)
-            if code: matched.append(code)
-            else: unresolved.append(rec)
-
-          matched = sorted(set(c for c in matched if c))
-          out_dir = pathlib.Path("docs/mega"); out_dir.mkdir(parents=True, exist_ok=True)
-          (out_dir / "aba5.json").write_text(json.dumps(matched, indent=2), encoding="utf-8")
-          (out_dir / "aba5_unresolved.json").write_text(json.dumps(unresolved, indent=2), encoding="utf-8")
-
-          print(f"[info] ABA 5 rows: {len(raw)}  -> matched codes: {len(matched)}  unresolved: {len(unresolved)}")
-          print("[info] First few codes:", json.dumps(matched[:10]))
-          PY
-
-      - name: Show ABA-5 resolve summary
+      - name: Build ABA-5 species list and diagnostics
         run: |
           set -euxo pipefail
-          python - <<'PY'
-          import json, pathlib
-          p = pathlib.Path("docs/mega/aba5.json")
-          if p.exists():
-              data = json.loads(p.read_text(encoding="utf-8"))
-              print("aba5.json size:", len(data))
-          else:
-              print("aba5.json missing")
-          q = pathlib.Path("docs/mega/aba5_unresolved.json")
-          if q.exists():
-              txt = q.read_text(encoding="utf-8")
-              print("unresolved sample:", txt[:2000])
-          PY
+          python build_mega_map.py \
+            --aba_csv scripts/data/ABA_Checklist.csv \
+            --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv \
+            --out_dir docs/mega \
+            --target_code 5
+
+      - name: Sanity checks and summary
+        run: |
+          set -euxo pipefail
+          test -s docs/mega/aba5.json
+          jq '.counts, .sizes' docs/mega/summary.json || true
+          echo "----- listing -----"
+          ls -lh docs/mega
+          echo "-------------------"
+          # Fail if no codes found
+          if [ "$(jq 'length' docs/mega/aba5.json)" -eq 0 ]; then
+            echo "❌ Empty aba5.json - check column headers or regex in build_mega_map.py"
+            exit 1
+          fi
 
       - name: Build mega map
         env:
@@ -216,6 +96,16 @@ jobs:
           echo "----- summary -----"
           cat docs/mega/summary.json || true
           echo "-------------------"
+
+      - name: Upload mega diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: mega-diagnostics
+          path: |
+            docs/mega/aba5.json
+            docs/mega/resolve.csv
+            docs/mega/unresolved_names.csv
+            docs/mega/summary.json
 
       - name: Commit and push docs/mega
         if: ${{ inputs.skip_commit != true }}
