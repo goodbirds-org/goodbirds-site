@@ -1,236 +1,334 @@
 #!/usr/bin/env python3
-"""
-Build docs/mega/aba5.json from an ABA checklist CSV and the eBird taxonomy CSV.
-
-Works with headers like:
-  ['Common Name', 'Scientific Name', 'Banding Code', 'ABA Checklist Code']
-
-Also accepts variants like PRIMARY_COM_NAME or ABA_CODE.
-
-Usage:
-  python scripts/prepare_aba5.py \
-    --aba data/ABA_Checklist.csv \
-    --tax data/eBird_taxonomy_v2024.csv \
-    --out docs/mega/aba5.json \
-    --report artifacts/aba_match_report.csv \
-    --suggest artifacts/aba_unmatched_suggestions.csv
-"""
-
 import argparse
 import json
+import os
 import re
 import sys
-import unicodedata
 from pathlib import Path
+from typing import List, Tuple, Dict
 
 import pandas as pd
-from difflib import get_close_matches
 
 
-def norm_text(s: str) -> str:
+# ---------- Normalization helpers ----------
+
+_PUNCT_RE = re.compile(r"[^a-z0-9 ]+")
+_SPACES_RE = re.compile(r"\s+")
+
+
+def normalize_name(s: str) -> str:
+    """
+    Normalize a common name for matching.
+    - lowercase
+    - strip parentheticals
+    - remove punctuation
+    - collapse spaces
+    """
     if s is None:
         return ""
-    s2 = " ".join(str(s).strip().split())
-    s2 = unicodedata.normalize("NFKD", s2).encode("ascii", "ignore").decode("ascii")
-    return s2
+    s = str(s).strip()
+    # remove parentheticals - e.g., "X (Y subspecies)" -> "X"
+    s = re.sub(r"\([^)]*\)", "", s)
+    s = s.lower()
+    s = _PUNCT_RE.sub(" ", s)
+    s = _SPACES_RE.sub(" ", s).strip()
+    return s
 
 
-def expand_variants(name: str):
-    # "Common Name (AOS Name)" -> ["Common Name", "AOS Name"]
-    if not name:
+def expand_variants(name: str) -> List[str]:
+    """
+    Generate reasonable matching variants for a given common name.
+    Try to help with small formatting differences.
+    """
+    if name is None:
         return []
-    s = str(name).strip()
-    out = []
-    main = re.split(r"\s*\(", s)[0].strip()
-    if main:
-        out.append(norm_text(main))
-    for m in re.finditer(r"\(([^)]+)\)", s):
-        alt = m.group(1).strip()
-        if alt:
-            out.append(norm_text(alt))
-    # de-dupe, keep order
-    seen, dedup = set(), []
-    for x in out:
-        if x and x not in seen:
-            seen.add(x)
-            dedup.append(x)
-    return dedup
+    base = str(name)
+    v = set()
+
+    # raw
+    v.add(base)
+
+    # normalized base
+    nb = normalize_name(base)
+    v.add(nb)
+
+    # try swapping hyphen and space in common hyphenated names like "kittlitz's murrelet"
+    hy_swap = base.replace("-", " ")
+    v.add(normalize_name(hy_swap))
+
+    # drop possessives visually - e.g., "kittlitz's" -> "kittlitzs" and "kittlitz"
+    v.add(normalize_name(re.sub(r"'s\b", "s", base)))
+    v.add(normalize_name(re.sub(r"'s\b", "", base)))
+
+    # compress slashes or " / "
+    v.add(normalize_name(base.replace("/", " ")))
+
+    # remove commas
+    v.add(normalize_name(base.replace(",", " ")))
+
+    # greedy punctuation strip
+    v.add(normalize_name(re.sub(r"[^\w\s]", " ", base)))
+
+    # de-duplicate and keep a stable order with normalized first
+    ordered = []
+    for cand in [nb] + [c for c in v if c != nb]:
+        if cand and cand not in ordered:
+            ordered.append(cand)
+    return ordered
 
 
-def normcol(c: str) -> str:
-    # Uppercase and strip non-alphanumerics for robust header matching
-    return re.sub(r"[^A-Z0-9]+", "", str(c).upper())
+# ---------- Detection of columns ----------
 
+def detect_aba_columns(df: pd.DataFrame) -> Tuple[str, str]:
+    """
+    Try to find the columns for Common Name and ABA Code.
+    Accepts a variety of header spellings and falls back to heuristics.
+    """
+    # build normalized header map
+    cols_map: Dict[str, str] = {
+        re.sub(r"[^A-Z0-9]+", "", str(c).upper()): c for c in df.columns
+    }
 
-def read_csv_with_preamble_trim(path: Path) -> pd.DataFrame:
-    # First try a plain read
-    try:
-        return pd.read_csv(path, dtype=str)
-    except Exception:
-        pass
-
-    # If that fails, scan first lines to find a likely header row
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    header_idx = None
-    sep = ","
-    for i, line in enumerate(lines[:200]):
-        parts_tab = "\t" in line and "," not in line
-        parts = line.split("\t") if parts_tab else line.split(",")
-        parts = [p.strip().strip('"') for p in parts]
-        keys = {normcol(p) for p in parts}
-        if any(k in keys for k in {"PRIMARYCOMNAME", "COMMONNAME", "ENGLISHNAME", "NAME"}) and \
-           any(k in keys for k in {"ABACHECKLISTCODE", "ABACODE", "CODE"}):
-            header_idx = i
-            sep = "\t" if parts_tab else ","
-            break
-
-    if header_idx is None:
-        # fallback: let pandas sniff
-        return pd.read_csv(path, dtype=str, engine="python", sep=None)
-
-    delimiter = "TAB" if sep == "\t" else "COMMA"
-    print(f"[info] Header found on line {header_idx+1} using delimiter {delimiter}")
-    return pd.read_csv(path, dtype=str, header=header_idx, sep=sep, engine="python")
-
-
-def detect_aba_columns(df: pd.DataFrame):
-    cols_map = {normcol(c): c for c in df.columns}
-
-    # Accept your exact headers and common variants
-    NAME_KEYS = {"PRIMARYCOMNAME", "COMMONNAME", "ENGLISHNAME", "NAME"}
-    CODE_KEYS = {"ABACHECKLISTCODE", "ABACODE", "CODE"}
+    NAME_KEYS = {
+        "PRIMARYCOMNAME", "COMMONNAME", "ENGLISHNAME", "NAME",
+        "PRIMARYCOMMONNAME", "PRIMARYCOMNAMEEN"
+    }
+    CODE_KEYS = {
+        "ABACHECKLISTCODE", "ABACODE", "CODE",
+        "ABARARITYCODE", "RARITYCODE"
+    }
 
     name_col = next((cols_map[k] for k in NAME_KEYS if k in cols_map), None)
     code_col = next((cols_map[k] for k in CODE_KEYS if k in cols_map), None)
 
-    # Fallback for your shown header strings
-    if not name_col and "Common Name" in df.columns:
-        name_col = "Common Name"
-    if not code_col and "ABA Checklist Code" in df.columns:
-        code_col = "ABA Checklist Code"
+    # common human-readable fallbacks
+    if not name_col:
+        for cand in ["Common Name", "PRIMARY_COM_NAME", "English Name", "Primary Com Name"]:
+            if cand in df.columns:
+                name_col = cand
+                break
+    if not code_col:
+        for cand in ["ABA Checklist Code", "ABA Rarity Code", "Rarity Code", "ABA Code"]:
+            if cand in df.columns:
+                code_col = cand
+                break
 
-    # Heuristic fallback: texty column for name, numeric 1..6 column for code
+    # heuristic fallback - guess which column looks like a name
     if not name_col:
         text_candidates = []
         for c in df.columns:
             vals = df[c].dropna().astype(str).head(50).tolist()
+            # look for spaces in values - common names usually have at least two words
             if any(" " in v for v in vals):
                 text_candidates.append(c)
         if text_candidates:
             name_col = text_candidates[0]
 
+    # heuristic fallback - guess which column looks like a small integer code 1..6
     if not code_col:
         numeric_candidates = []
         for c in df.columns:
             v = pd.to_numeric(df[c], errors="coerce")
             uniq = set(v.dropna().astype(int).unique().tolist())
-            if v.notna().mean() > 0.7 and uniq.issubset({1, 2, 3, 4, 5, 6}):
+            if v.notna().mean() > 0.5 and uniq.issubset({1, 2, 3, 4, 5, 6}):
                 numeric_candidates.append(c)
         if numeric_candidates:
             code_col = numeric_candidates[0]
 
     if not name_col or not code_col:
-        print("[error] Could not locate Name and ABA Code columns after normalization")
-        print("[debug] Raw header:", list(df.columns))
-        print("[debug] Normalized header:", list(cols_map.keys()))
-        raise SystemExit(1)
+        print("[error] Could not locate Name and ABA Code columns after normalization", file=sys.stderr)
+        print("[debug] Raw header:", list(df.columns), file=sys.stderr)
+        print("[debug] Normalized header:", list(cols_map.keys()), file=sys.stderr)
+        raise SystemExit(2)
 
     return name_col, code_col
 
 
-def load_taxonomy(tax_path: Path) -> pd.DataFrame:
-    tax = pd.read_csv(tax_path, dtype=str)
-    req = {"PRIMARY_COM_NAME", "SPECIES_CODE"}
-    if not req.issubset(set(tax.columns)):
-        missing = sorted(req - set(tax.columns))
-        print(f"[error] Taxonomy missing columns: {missing}")
-        raise SystemExit(1)
-    tax["_norm_name"] = tax["PRIMARY_COM_NAME"].map(norm_text)
-    return tax
+# ---------- Core mapping ----------
 
+def build_codes(
+    aba_df: pd.DataFrame,
+    tax_df: pd.DataFrame,
+    name_col: str,
+    code_col: str,
+    target_code: str
+) -> Tuple[List[str], pd.DataFrame, List[str]]:
+    """
+    Map ABA rows to eBird species codes and select those matching the target code.
+    Returns:
+      - sorted unique species codes for the target code
+      - full resolve DataFrame
+      - list of unmatched common names
+    """
+    # prepare taxonomy map from normalized PRIMARY_COM_NAME -> SPECIES_CODE
+    tax_df = tax_df.copy()
+    # taxonomy header variants - be permissive but prefer eBird canonical headers
+    tax_name_col = None
+    for cand in ["PRIMARY_COM_NAME", "PRIMARY COM NAME", "PRIMARY_COM_NAME_EN", "PRIMARY_COM_NAME_FR", "ENGLISH_NAME", "COMMON NAME"]:
+        if cand in tax_df.columns:
+            tax_name_col = cand
+            break
+    if tax_name_col is None:
+        # find first column that looks like names
+        for c in tax_df.columns:
+            if tax_df[c].astype(str).str.contains(" ").mean() > 0.5:
+                tax_name_col = c
+                break
+    if tax_name_col is None:
+        print("[error] Could not find a taxonomy common-name column", file=sys.stderr)
+        raise SystemExit(3)
 
-def build_codes(aba_df: pd.DataFrame, tax_df: pd.DataFrame, name_col: str, code_col: str, target_code: str):
-    name_to_code = dict(zip(tax_df["_norm_name"], tax_df["SPECIES_CODE"].str.lower()))
+    if "SPECIES_CODE" not in tax_df.columns:
+        # look for likely species code column if header changed
+        spc_col = None
+        for c in tax_df.columns:
+            if c.upper().replace(" ", "_") in {"SPECIES_CODE", "SPECIESCODE", "EBIRD_CODE", "EBIRDCODE"}:
+                spc_col = c
+                break
+        if spc_col is None:
+            print("[error] Taxonomy CSV does not have SPECIES_CODE", file=sys.stderr)
+            raise SystemExit(4)
+        tax_df = tax_df.rename(columns={spc_col: "SPECIES_CODE"})
 
+    tax_df["_norm_name"] = tax_df[tax_name_col].astype(str).map(normalize_name)
+    name_to_code = dict(zip(tax_df["_norm_name"], tax_df["SPECIES_CODE"].astype(str).str.lower()))
+
+    # resolve ABA rows
     rows = []
     unmatched = []
     for _, r in aba_df.iterrows():
         nm = r.get(name_col)
-        code_val = r.get(code_col)
+        code_val = str(r.get(code_col) or "").strip()
         variants = expand_variants(nm)
+
         sc = None
         for v in variants:
             sc = name_to_code.get(v)
             if sc:
                 break
+
         rows.append({
             "ABA_ROW_NAME": nm,
-            "ABA_CODE": str(code_val) if code_val is not None else None,
+            "ABA_CODE": code_val,
             "MATCH_VARIANT": variants[0] if variants else None,
             "SPECIES_CODE": sc,
         })
         if sc is None and nm not in (None, ""):
-            unmatched.append(nm)
+            unmatched.append(str(nm))
 
     res = pd.DataFrame(rows)
-    sel = res[res["ABA_CODE"].astype(str).str.strip() == target_code] if "ABA_CODE" in res.columns else res
-    codes = sorted(set(sel["SPECIES_CODE"].dropna().tolist()))
+
+    # Accept 5, 5*, 5?, 5.0, etc - same idea as your workflow
+    sel_mask = res["ABA_CODE"].astype(str).str.match(rf"^\s*{re.escape(str(target_code))}\b", na=False)
+    sel = res[sel_mask]
+    codes = sorted(set(sel["SPECIES_CODE"].dropna().astype(str).str.lower().tolist()))
     return codes, res, unmatched
 
 
-def write_suggestions(unmatched, tax_df: pd.DataFrame, path: Path):
-    tax_names = tax_df["PRIMARY_COM_NAME"].dropna().unique().tolist()
-    tax_norm = [" ".join(n.strip().split()).lower() for n in tax_names]
-    inv_norm = dict(zip(tax_norm, tax_names))
-    sugg_rows = []
-    for name in sorted(set(unmatched)):
-        n = " ".join(str(name).strip().split()).lower()
-        if not n:
-            continue
-        for m in get_close_matches(n, tax_norm, n=3, cutoff=0.7):
-            sugg_rows.append({"ABA_ROW_NAME": name, "Suggested_MATCH": inv_norm[m]})
-    pd.DataFrame(sugg_rows).drop_duplicates().to_csv(path, index=False, encoding="utf-8")
+# ---------- IO utilities ----------
 
+def write_json(obj, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+
+def write_csv(df: pd.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+
+
+def file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+# ---------- Main ----------
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--aba", required=True, type=Path, help="ABA checklist CSV")
-    ap.add_argument("--tax", required=True, type=Path, help="eBird taxonomy CSV")
-    ap.add_argument("--out", required=True, type=Path, help="Output aba5.json")
-    ap.add_argument("--report", type=Path, default=None, help="Optional: write match report CSV")
-    ap.add_argument("--suggest", type=Path, default=None, help="Optional: write fuzzy suggestions CSV")
-    ap.add_argument("--code", default="5", help="ABA code to select (default 5)")
+    ap = argparse.ArgumentParser(description="Build ABA Code-5 species list and diagnostics for the Mega map.")
+    ap.add_argument("--aba_csv", required=True, help="Path to ABA checklist CSV")
+    ap.add_argument("--taxonomy_csv", required=True, help="Path to eBird taxonomy CSV (eBird v2024 works)")
+    ap.add_argument("--out_dir", default="docs/mega", help="Output directory for artifacts")
+    ap.add_argument("--target_code", default="5", help="ABA code to select - default 5")
     args = ap.parse_args()
 
-    aba_df = read_csv_with_preamble_trim(args.aba)
-    tax_df = load_taxonomy(args.tax)
+    out_dir = Path(args.out_dir)
+    aba_csv = Path(args.aba_csv)
+    tax_csv = Path(args.taxonomy_csv)
 
+    if not aba_csv.exists():
+        print(f"[error] ABA CSV not found: {aba_csv}", file=sys.stderr)
+        return 5
+    if not tax_csv.exists():
+        print(f"[error] Taxonomy CSV not found: {tax_csv}", file=sys.stderr)
+        return 6
+
+    # Load
+    aba_df = pd.read_csv(aba_csv)
+    tax_df = pd.read_csv(tax_csv)
+
+    # Detect columns
     name_col, code_col = detect_aba_columns(aba_df)
-    print(f"[info] Using name column: {name_col} | code column: {code_col}")
+    print(f"[info] Using ABA name column: {name_col}")
+    print(f"[info] Using ABA code column: {code_col}")
 
-    codes, report_df, unmatched = build_codes(aba_df, tax_df, name_col, code_col, args.code)
+    # Build codes and diagnostics
+    codes, resolve_df, unmatched = build_codes(
+        aba_df, tax_df, name_col=name_col, code_col=code_col, target_code=str(args.target_code)
+    )
 
-    # Write outputs
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(codes, indent=2), encoding="utf-8")
+    # Write artifacts
+    aba5_json_path = out_dir / "aba5.json"
+    write_json(codes, aba5_json_path)
+    print(f"[info] Wrote {aba5_json_path} with {len(codes)} species codes")
 
-    if args.report:
-        args.report.parent.mkdir(parents=True, exist_ok=True)
-        report_df.to_csv(args.report, index=False, encoding="utf-8")
+    resolve_csv_path = out_dir / "resolve.csv"
+    write_csv(resolve_df, resolve_csv_path)
+    print(f"[info] Wrote {resolve_csv_path} - full row-by-row match report")
 
-    if args.suggest:
-        args.suggest.parent.mkdir(parents=True, exist_ok=True)
-        write_suggestions(unmatched, tax_df, args.suggest)
+    unresolved_csv_path = out_dir / "unresolved_names.csv"
+    if unmatched:
+        unresolved_df = pd.DataFrame(sorted(set(unmatched)), columns=["UNRESOLVED_COMMON_NAME"])
+        write_csv(unresolved_df, unresolved_csv_path)
+        print(f"[warn] {len(unresolved_df)} names did not map to a species code - see {unresolved_csv_path}")
+    else:
+        # still emit an empty file so downstream steps can read it
+        write_csv(pd.DataFrame(columns=["UNRESOLVED_COMMON_NAME"]), unresolved_csv_path)
+        print("[info] All ABA names resolved to species codes")
 
-    print(f"[ok] matched {report_df['SPECIES_CODE'].notna().sum()} of {len(report_df)} rows")
-    print(f"[ok] wrote {len(codes)} Code-{args.code} species codes to {args.out}")
+    # Summary - helps you debug CI logs at a glance
+    summary = {
+        "aba_csv": str(aba_csv),
+        "taxonomy_csv": str(tax_csv),
+        "out_dir": str(out_dir),
+        "target_code": str(args.target_code),
+        "counts": {
+            "aba_rows": int(len(aba_df)),
+            "resolved_rows": int((resolve_df["SPECIES_CODE"].notna()).sum()),
+            "unresolved_rows": int((resolve_df["SPECIES_CODE"].isna()).sum()),
+            "selected_code_rows": int(resolve_df["ABA_CODE"].astype(str).str.match(rf"^\s*{re.escape(str(args.target_code))}\b", na=False).sum()),
+            "species_codes_emitted": int(len(codes)),
+        },
+        "sizes": {
+            "aba5_json": file_size(aba5_json_path),
+            "resolve_csv": file_size(resolve_csv_path),
+            "unresolved_names_csv": file_size(unresolved_csv_path),
+        },
+    }
+    summary_json_path = out_dir / "summary.json"
+    write_json(summary, summary_json_path)
+    print(f"[info] Wrote {summary_json_path}")
+
+    # Failure guard - if we ended up with zero codes, exit nonzero so CI flags it
+    if len(codes) == 0:
+        print("[error] No species codes emitted for the selected ABA code. Check column detection, code values, and unresolved names.", file=sys.stderr)
+        return 7
+
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except SystemExit as e:
-        sys.exit(e.code)
-    except Exception as ex:
-        print(f"[error] {ex}")
-        sys.exit(1)
+    sys.exit(main())
