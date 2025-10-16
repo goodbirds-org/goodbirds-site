@@ -2,7 +2,7 @@ name: Build US+Canada Mega-Rarities Map
 
 on:
   schedule:
-    - cron: "13 9 * * *"
+    - cron: "13 9 * * *"   # Daily 09:13 UTC
   workflow_dispatch:
     inputs:
       skip_commit:
@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       mode:
-        description: "Map mode: 'aba5_only' or 'union'."
+        description: "Map mode: 'aba5_only' (strict ABA Code 5) or 'union' (includes national scarcities)."
         type: choice
         options: [aba5_only, union]
         default: aba5_only
@@ -21,7 +21,7 @@ on:
       per_species_max:
         description: "Max markers per species."
         type: string
-        default: "2"
+        default: "1"
 
 permissions:
   contents: write
@@ -52,16 +52,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests folium jq
 
-      - name: Ensure inputs exist
+      - name: Ensure data inputs exist
         run: |
           set -euxo pipefail
           test -f scripts/data/ABA_Checklist.csv
           test -f scripts/data/eBird_taxonomy_v2024.csv
           mkdir -p docs/mega
 
-      # You already have a step upstream that builds docs/mega/aba5.json.
-      # If not, ensure it exists here.
-      - name: Verify aba5.json present
+      - name: Verify ABA-5 list exists
         run: |
           set -euxo pipefail
           test -s docs/mega/aba5.json
@@ -72,9 +70,8 @@ jobs:
           EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
           MEGA_MODE: ${{ inputs.mode }}
           MEGA_BACK_DAYS_RECENT: ${{ inputs.back_days_recent }}
-          MEGA_BACK_DAYS_SCARCITY: "365"
-          MEGA_NATIONAL_MAX: "25"
-          MEGA_PER_SPECIES_MAX: ${{ inputs.per_species_max }}
+          MEGA_NATIONAL_MAX: "60"     # total markers cap
+          MEGA_PER_SPECIES_MAX: "1"   # per-species cap
         run: |
           set -euxo pipefail
           python scripts/build_mega_map.py \
@@ -82,9 +79,16 @@ jobs:
             --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv \
             --out_dir docs/mega \
             --target_code 5
-          echo "----- summary -----"
-          cat docs/mega/summary.json || true
+          echo "----- SUMMARY -----"
+          jq '.' docs/mega/summary.json || true
           echo "-------------------"
+          HTML_SIZE=$(stat -c%s docs/mega/index.html)
+          echo "HTML size: $HTML_SIZE bytes"
+          # fail if over 5 MB
+          if [ "$HTML_SIZE" -gt 5000000 ]; then
+            echo "❌ index.html exceeds 5 MB, likely unfiltered. Failing build."
+            exit 1
+          fi
 
       - name: Guard against malformed JS
         run: |
@@ -101,10 +105,10 @@ jobs:
           path: |
             docs/mega/aba5.json
             docs/mega/aba5_unresolved.json
-            docs/mega/resolve.csv
-            docs/mega/unresolved_names.csv
             docs/mega/summary.json
             docs/mega/index.html
+            docs/mega/*.csv
+          if-no-files-found: warn
 
       - name: Commit and push docs/mega
         if: ${{ inputs.skip_commit != true }}
