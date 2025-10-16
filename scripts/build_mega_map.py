@@ -69,15 +69,30 @@ def load_aba5(out_dir: Path):
 
 
 def fetch_recent_notables_us_ca(back_days):
-    # US and CA only
-    # eBird API docs: recent notable, region codes US, CA
-    # We call per country so we can cap later
-    base = "https://api.ebird.org/v2/data/obs/region/recent/notable"
+    """
+    Correct eBird endpoint:
+      GET /v2/data/obs/{regionCode}/recent/notable
+    We call it for US and CA separately and combine.
+    """
+    base = "https://api.ebird.org/v2/data/obs"
     params = {"detail": "full", "back": back_days, "maxResults": 20000}
     out = []
     for region in ("US", "CA"):
-        r = requests.get(f"{base}/{region}", headers=ebird_headers(), params=params, timeout=60)
-        r.raise_for_status()
+        url = f"{base}/{region}/recent/notable"
+        try:
+            r = requests.get(url, headers=ebird_headers(), params=params, timeout=60)
+            if r.status_code == 404:
+                # Show the exact URL in logs so it’s obvious what failed
+                raise requests.HTTPError(f"404 from {url}", response=r)
+            r.raise_for_status()
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = r.text[:500]
+            except Exception:
+                pass
+            print(f"[error] HTTP {r.status_code} at {url}\n{body}", file=sys.stderr)
+            raise
         out.extend(r.json())
     return out
 
@@ -114,7 +129,6 @@ def cap_records(records, per_species_max, national_max):
     def obs_dt_key(r):
         # r["obsDt"] example "2025-10-09 08:07"
         s = r.get("obsDt") or ""
-        # keep string fallback sort
         return s
 
     trimmed = []
@@ -207,7 +221,6 @@ def main():
         picked = [r for r in picked if r.get("speciesCode") in aba5_codes]
     else:
         # union mode can include all notables, but still keep any that are ABA5
-        # Final caps will keep the map light
         pass
 
     # Apply caps
@@ -247,7 +260,7 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except requests.HTTPError as e:
-        print(f"[error] HTTP {e.response.status_code}: {e.response.text[:500]}", file=sys.stderr)
+        # If we get here, fetch_recent_notables_us_ca already printed the URL and a snippet of the body
         sys.exit(10)
     except Exception as e:
         print(f"[error] {e}", file=sys.stderr)
