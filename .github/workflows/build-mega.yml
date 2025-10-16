@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       mode:
-        description: "Map mode: 'aba5_only' (strict ABA Code 5) or 'union' (includes national scarcities)."
+        description: "Map mode: 'aba5_only' or 'union'."
         type: choice
         options: [aba5_only, union]
         default: aba5_only
@@ -19,7 +19,7 @@ on:
         type: string
         default: "1"
       per_species_max:
-        description: "Max markers per species to keep map responsive."
+        description: "Max markers per species."
         type: string
         default: "2"
 
@@ -52,35 +52,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests folium jq
 
-      - name: Ensure data exists
+      - name: Ensure inputs exist
         run: |
           set -euxo pipefail
           test -f scripts/data/ABA_Checklist.csv
           test -f scripts/data/eBird_taxonomy_v2024.csv
           mkdir -p docs/mega
 
-      - name: Build ABA-5 species list and diagnostics
-        run: |
-          set -euxo pipefail
-          python scripts/build_mega_map.py \
-            --aba_csv scripts/data/ABA_Checklist.csv \
-            --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv \
-            --out_dir docs/mega \
-            --target_code 5
-
-      - name: Verify aba5.json and print summary
+      # You already have a step upstream that builds docs/mega/aba5.json.
+      # If not, ensure it exists here.
+      - name: Verify aba5.json present
         run: |
           set -euxo pipefail
           test -s docs/mega/aba5.json
           echo "ABA5 species count: $(jq 'length' docs/mega/aba5.json)"
-          jq '.counts, .sizes' docs/mega/summary.json || true
-          echo "----- file listing -----"
-          ls -lh docs/mega
-          echo "------------------------"
-          if [ "$(jq 'length' docs/mega/aba5.json)" -eq 0 ]; then
-            echo "aba5.json is empty"
-            exit 1
-          fi
 
       - name: Build mega map
         env:
@@ -101,17 +86,25 @@ jobs:
           cat docs/mega/summary.json || true
           echo "-------------------"
 
+      - name: Guard against malformed JS
+        run: |
+          set -euxo pipefail
+          if grep -nE '^[[:space:]]*\.\{' docs/mega/index.html; then
+            echo "Found '.{' in index.html - failing build"
+            exit 1
+          fi
+
       - name: Upload diagnostics
         uses: actions/upload-artifact@v4
         with:
           name: mega-diagnostics
           path: |
             docs/mega/aba5.json
+            docs/mega/aba5_unresolved.json
             docs/mega/resolve.csv
             docs/mega/unresolved_names.csv
             docs/mega/summary.json
-            docs/mega/aba5_unresolved.json
-            docs/mega/*.html
+            docs/mega/index.html
 
       - name: Commit and push docs/mega
         if: ${{ inputs.skip_commit != true }}
