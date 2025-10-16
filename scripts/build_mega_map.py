@@ -1,298 +1,254 @@
 #!/usr/bin/env python3
+"""
+Build the Mega map HTML and summary from ABA Code-5 species and recent eBird 'notable' data.
+
+Inputs:
+  --aba_csv           Path to ABA checklist CSV (not strictly required for map if docs/mega/aba5.json exists)
+  --taxonomy_csv      Path to eBird taxonomy CSV (not strictly required for map build itself)
+  --out_dir           Output dir, default docs/mega
+  --target_code       ABA code to select, default 5
+
+Environment:
+  EBIRD_API_KEY               required to call eBird API
+  MEGA_MODE                   "aba5_only" | "union" (union may add nationally scarce notables)
+  MEGA_BACK_DAYS_RECENT       integer days for recent notables (default 1)
+  MEGA_BACK_DAYS_SCARCITY     integer days for scarcity window (default 365)
+  MEGA_NATIONAL_MAX           cap on total markers (default 25)
+  MEGA_PER_SPECIES_MAX        cap per species (default 2)
+
+Outputs:
+  docs/mega/index.html        Folium map
+  docs/mega/summary.json      Build stats
+  docs/mega/aba5.json         Code-5 species list (must exist already or be generated upstream)
+"""
+
 import argparse
 import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple, Dict
+from collections import defaultdict
 
-import pandas as pd
+import requests
+import folium
+from folium.plugins import MarkerCluster
 
-# ---------- Normalization helpers ----------
 
-_PUNCT_RE = re.compile(r"[^a-z0-9 ]+")
-_SPACES_RE = re.compile(r"\s+")
-
-def normalize_name(s: str) -> str:
-    if s is None:
-        return ""
-    s = str(s).strip()
-    s = re.sub(r"\([^)]*\)", "", s)  # drop parentheticals
-    s = s.lower()
-    s = _PUNCT_RE.sub(" ", s)
-    s = _SPACES_RE.sub(" ", s).strip()
-    return s
-
-def expand_variants(name: str) -> List[str]:
-    if name is None:
-        return []
-    base = str(name)
-    v = set()
-    v.add(base)
-    nb = normalize_name(base)
-    v.add(nb)
-    v.add(normalize_name(base.replace("-", " ")))
-    v.add(normalize_name(re.sub(r"'s\b", "s", base)))
-    v.add(normalize_name(re.sub(r"'s\b", "", base)))
-    v.add(normalize_name(base.replace("/", " ")))
-    v.add(normalize_name(base.replace(",", " ")))
-    v.add(normalize_name(re.sub(r"[^\w\s]", " ", base)))
-    ordered = []
-    for cand in [nb] + [c for c in v if c != nb]:
-        if cand and cand not in ordered:
-            ordered.append(cand)
-    return ordered
-
-# ---------- CSV loaders with optional preamble trim ----------
-
-def read_csv_with_header_detection(path: Path) -> pd.DataFrame:
-    """
-    Reads a CSV even if a preamble exists above the header line.
-    We scan the first ~50 lines to find a header that contains likely fields.
-    """
-    likely_headers = [
-        ("Common Name", "ABA Checklist Code"),
-        ("PRIMARY_COM_NAME", "SPECIES_CODE"),
-        ("PRIMARY COM NAME", "SPECIES_CODE"),
-    ]
-
-    # First try straight read
+def getenv_int(name, default):
     try:
-        return pd.read_csv(path)
+        return int(os.getenv(name, str(default)).strip())
     except Exception:
-        pass
+        return default
 
-    # Scan for a header row
-    with path.open("r", encoding="utf-8", errors="replace") as f:
-        lines = f.read().splitlines()
 
-    for i in range(min(50, len(lines))):
-        header = [h.strip() for h in lines[i].split(",")]
-        header_upper = [h.upper() for h in header]
-        for a, b in likely_headers:
-            if a.upper() in header_upper and b.upper() in header_upper:
-                # re-read from this line as header
-                return pd.read_csv(path, header=i)
+def ebird_headers():
+    api_key = os.getenv("EBIRD_API_KEY", "").strip()
+    if not api_key:
+        print("[error] EBIRD_API_KEY is missing", file=sys.stderr)
+        sys.exit(2)
+    return {"X-eBirdApiToken": api_key}
 
-    # Fallback: let pandas try again (will raise)
-    return pd.read_csv(path)
 
-# ---------- Column detection ----------
-
-def detect_aba_columns(df: pd.DataFrame) -> Tuple[str, str]:
-    cols_map: Dict[str, str] = {
-        re.sub(r"[^A-Z0-9]+", "", str(c).upper()): c for c in df.columns
-    }
-    NAME_KEYS = {
-        "PRIMARYCOMNAME", "PRIMARYCOMMONNAME", "PRIMARYCOMNAMEEN",
-        "COMMONNAME", "ENGLISHNAME", "NAME"
-    }
-    CODE_KEYS = {
-        "ABACHECKLISTCODE", "ABACODE", "CODE",
-        "ABARARITYCODE", "RARITYCODE"
-    }
-
-    name_col = next((cols_map[k] for k in NAME_KEYS if k in cols_map), None)
-    code_col = next((cols_map[k] for k in CODE_KEYS if k in cols_map), None)
-
-    if not name_col:
-        for cand in ["Common Name", "PRIMARY_COM_NAME", "English Name", "Primary Com Name"]:
-            if cand in df.columns:
-                name_col = cand
-                break
-    if not code_col:
-        for cand in ["ABA Checklist Code", "ABA Rarity Code", "Rarity Code", "ABA Code"]:
-            if cand in df.columns:
-                code_col = cand
-                break
-
-    if not name_col:
-        # heuristic: column with many values that contain spaces
-        cands = [c for c in df.columns if df[c].astype(str).str.contains(" ").mean() > 0.5]
-        if cands:
-            name_col = cands[0]
-
-    if not code_col:
-        # heuristic: column that looks like small integers 1..6
-        cands = []
-        for c in df.columns:
-            v = pd.to_numeric(df[c], errors="coerce")
-            uniq = set(v.dropna().astype(int).unique().tolist())
-            if v.notna().mean() > 0.5 and uniq.issubset({1, 2, 3, 4, 5, 6}):
-                cands.append(c)
-        if cands:
-            code_col = cands[0]
-
-    if not name_col or not code_col:
-        print("[error] Could not locate Name and ABA Code columns after normalization", file=sys.stderr)
-        print("[debug] Raw header:", list(df.columns), file=sys.stderr)
-        print("[debug] Normalized header:", list(cols_map.keys()), file=sys.stderr)
-        raise SystemExit(2)
-
-    return name_col, code_col
-
-def detect_taxonomy_columns(tax_df: pd.DataFrame) -> Tuple[str, str]:
-    name_cand = None
-    for cand in ["PRIMARY_COM_NAME", "PRIMARY COM NAME", "ENGLISH_NAME", "Common Name"]:
-        if cand in tax_df.columns:
-            name_cand = cand
-            break
-    if name_cand is None:
-        for c in tax_df.columns:
-            if tax_df[c].astype(str).str.contains(" ").mean() > 0.5:
-                name_cand = c
-                break
-
-    spc = "SPECIES_CODE"
-    if spc not in tax_df.columns:
-        alt = None
-        for c in tax_df.columns:
-            key = c.upper().replace(" ", "_")
-            if key in {"SPECIES_CODE", "SPECIESCODE", "EBIRD_CODE", "EBIRDCODE"}:
-                alt = c
-                break
-        if alt is None:
-            print("[error] Taxonomy CSV does not have SPECIES_CODE", file=sys.stderr)
-            raise SystemExit(4)
-        tax_df = tax_df.rename(columns={alt: spc})
-
-    if name_cand is None:
-        print("[error] Could not find a taxonomy common-name column", file=sys.stderr)
-        raise SystemExit(3)
-
-    return name_cand, spc, tax_df
-
-# ---------- Core mapping ----------
-
-def build_codes(
-    aba_df: pd.DataFrame,
-    tax_df: pd.DataFrame,
-    name_col: str,
-    code_col: str,
-    target_code: str
-):
-    tax_df = tax_df.copy()
-    tax_name_col, spc_col, tax_df = detect_taxonomy_columns(tax_df)
-    tax_df["_norm"] = tax_df[tax_name_col].astype(str).map(normalize_name)
-    name_to_code = dict(zip(tax_df["_norm"], tax_df[spc_col].astype(str).str.lower()))
-
-    rows, unmatched = [], []
-    for _, r in aba_df.iterrows():
-        nm = r.get(name_col)
-        code_val = str(r.get(code_col) or "").strip()
-        variants = expand_variants(nm)
-        sc = None
-        for v in variants:
-            sc = name_to_code.get(v)
-            if sc:
-                break
-        rows.append({
-            "ABA_ROW_NAME": nm,
-            "ABA_CODE": code_val,
-            "MATCH_VARIANT": variants[0] if variants else None,
-            "SPECIES_CODE": sc,
-        })
-        if sc is None and nm not in (None, ""):
-            unmatched.append(str(nm))
-
-    res = pd.DataFrame(rows)
-
-    # accept 5, 5?, 5*, 5.0 etc.
-    sel_mask = res["ABA_CODE"].astype(str).str.match(rf"^\s*{re.escape(str(target_code))}\b", na=False)
-    sel = res[sel_mask]
-    codes = sorted(set(sel["SPECIES_CODE"].dropna().astype(str).str.lower().tolist()))
-    return codes, res, unmatched
-
-# ---------- IO helpers ----------
-
-def write_json(obj, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-
-def write_csv(df: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding="utf-8")
-
-def file_size(path: Path) -> int:
+def load_aba5(out_dir: Path):
+    p = out_dir / "aba5.json"
+    if not p.exists() or p.stat().st_size == 0:
+        print("[error] docs/mega/aba5.json missing or empty. Build that first.", file=sys.stderr)
+        sys.exit(3)
     try:
-        return path.stat().st_size
-    except FileNotFoundError:
-        return 0
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[error] Failed to parse {p}: {e}", file=sys.stderr)
+        sys.exit(3)
+    if not isinstance(data, list):
+        print("[error] aba5.json must be a list of species codes", file=sys.stderr)
+        sys.exit(3)
+    # normalize to lower
+    return sorted({str(x).lower().strip() for x in data if str(x).strip()})
 
-# ---------- Main ----------
+
+def fetch_recent_notables_us_ca(back_days):
+    # US and CA only
+    # eBird API docs: recent notable, region codes US, CA
+    # We call per country so we can cap later
+    base = "https://api.ebird.org/v2/data/obs/region/recent/notable"
+    params = {"detail": "full", "back": back_days, "maxResults": 20000}
+    out = []
+    for region in ("US", "CA"):
+        r = requests.get(f"{base}/{region}", headers=ebird_headers(), params=params, timeout=60)
+        r.raise_for_status()
+        out.extend(r.json())
+    return out
+
+
+def norm_species_code(s: str) -> str:
+    return (s or "").strip().lower()
+
+
+def pick_recent_fields(rec):
+    # Select only what we render or use for tooltips
+    return {
+        "comName": rec.get("comName"),
+        "sciName": rec.get("sciName"),
+        "lat": rec.get("lat"),
+        "lng": rec.get("lng"),
+        "locName": rec.get("locName"),
+        "obsDt": rec.get("obsDt"),
+        "subId": rec.get("subId"),
+        "howMany": rec.get("howMany"),
+        "countryCode": rec.get("countryCode"),
+        "subnational1Code": rec.get("subnational1Code"),
+        "speciesCode": norm_species_code(rec.get("speciesCode")),
+    }
+
+
+def cap_records(records, per_species_max, national_max):
+    by_species = defaultdict(list)
+    for rec in records:
+        sc = rec.get("speciesCode")
+        if sc:
+            by_species[sc].append(rec)
+
+    # sort by observation date descending within species, keep top per_species_max
+    def obs_dt_key(r):
+        # r["obsDt"] example "2025-10-09 08:07"
+        s = r.get("obsDt") or ""
+        # keep string fallback sort
+        return s
+
+    trimmed = []
+    for sc, recs in by_species.items():
+        recs_sorted = sorted(recs, key=obs_dt_key, reverse=True)
+        trimmed.extend(recs_sorted[:per_species_max])
+
+    # If we exceed national_max, keep the freshest overall
+    if len(trimmed) > national_max:
+        trimmed = sorted(trimmed, key=obs_dt_key, reverse=True)[:national_max]
+
+    return trimmed
+
+
+def build_map_html(out_dir: Path, points):
+    # Use Folium cleanly. No template injection. No stray ".{"
+    m = folium.Map(
+        location=[45.0, -96.0],
+        zoom_start=4,
+        control_scale=True,
+        prefer_canvas=False,
+        tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attr="&copy; OpenStreetMap contributors",
+    )
+
+    cluster = MarkerCluster().add_to(m)
+
+    for r in points:
+        lat = r.get("lat")
+        lng = r.get("lng")
+        if lat is None or lng is None:
+            continue
+        name = r.get("comName") or "(unknown)"
+        loc = r.get("locName") or ""
+        when = r.get("obsDt") or ""
+        sub = r.get("subId")
+        href = f"https://ebird.org/checklist/{sub}" if sub else None
+        popup_html = f"""
+        <div>
+          <b>{name}</b><br>
+          {loc}<br>
+          <small>{when}</small><br>
+          {"<a href='" + href + "' target='_blank' rel='noopener'>Open checklist</a>" if href else ""}
+        </div>
+        """.strip()
+        folium.CircleMarker(
+            location=[lat, lng],
+            radius=7,
+            color="darkred",
+            weight=3,
+            fill=True,
+            fill_color="darkred",
+            fill_opacity=0.9,
+        ).add_to(cluster).add_child(folium.Popup(popup_html, max_width=300)).add_child(
+            folium.Tooltip(f"{name} • {loc}", sticky=True)
+        )
+
+    out_path = out_dir / "index.html"
+    m.save(str(out_path))
+    return out_path
+
 
 def main():
-    ap = argparse.ArgumentParser(description="Build ABA Code-N species list and diagnostics for the Mega map.")
-    ap.add_argument("--aba_csv", required=True, help="Path to ABA checklist CSV")
-    ap.add_argument("--taxonomy_csv", required=True, help="Path to eBird taxonomy CSV")
-    ap.add_argument("--out_dir", default="docs/mega", help="Output directory for artifacts")
-    ap.add_argument("--target_code", default="5", help="ABA code to select")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--aba_csv", required=False, help="Path to ABA checklist CSV (not required for map if aba5.json exists)")
+    ap.add_argument("--taxonomy_csv", required=False, help="Path to eBird taxonomy CSV (not required for map build)")
+    ap.add_argument("--out_dir", default="docs/mega")
+    ap.add_argument("--target_code", default="5")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
-    aba_csv = Path(args.aba_csv)
-    tax_csv = Path(args.taxonomy_csv)
-
-    if not aba_csv.exists():
-        print(f"[error] ABA CSV not found: {aba_csv}", file=sys.stderr)
-        sys.exit(5)
-    if not tax_csv.exists():
-        print(f"[error] Taxonomy CSV not found: {tax_csv}", file=sys.stderr)
-        sys.exit(6)
-
-    # Load with preamble-resilient reader
-    aba_df = read_csv_with_header_detection(aba_csv)
-    tax_df = read_csv_with_header_detection(tax_csv)
-
-    name_col, code_col = detect_aba_columns(aba_df)
-    print(f"[info] Using ABA name column: {name_col}")
-    print(f"[info] Using ABA code column: {code_col}")
-
-    codes, resolve_df, unmatched = build_codes(
-        aba_df, tax_df, name_col=name_col, code_col=code_col, target_code=str(args.target_code)
-    )
-
-    # Write artifacts
     out_dir.mkdir(parents=True, exist_ok=True)
-    abaN_json_path = out_dir / "aba5.json"  # keep filename for downstream
-    write_json(codes, abaN_json_path)
-    write_csv(resolve_df, out_dir / "resolve.csv")
-    write_csv(pd.DataFrame(sorted(set(unmatched)), columns=["UNRESOLVED_COMMON_NAME"]),
-              out_dir / "unresolved_names.csv")
 
+    # Inputs and caps
+    mode = os.getenv("MEGA_MODE", "aba5_only").strip()
+    back_recent = getenv_int("MEGA_BACK_DAYS_RECENT", 1)
+    back_scarcity = getenv_int("MEGA_BACK_DAYS_SCARCITY", 365)  # kept for future logic
+    national_max = getenv_int("MEGA_NATIONAL_MAX", 25)
+    per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 2)
+
+    # Load ABA-5 list
+    aba5_codes = load_aba5(out_dir)
+
+    # Fetch recent notables
+    raw = fetch_recent_notables_us_ca(back_recent)
+    picked = [pick_recent_fields(r) for r in raw]
+
+    # Filter by mode
+    if mode == "aba5_only":
+        picked = [r for r in picked if r.get("speciesCode") in aba5_codes]
+    else:
+        # union mode can include all notables, but still keep any that are ABA5
+        # Final caps will keep the map light
+        pass
+
+    # Apply caps
+    points = cap_records(picked, per_species_max=per_species_max, national_max=national_max)
+
+    # Build map
+    html_path = build_map_html(out_dir, points)
+
+    # Summary
     summary = {
-        "aba_csv": str(aba_csv),
-        "taxonomy_csv": str(tax_csv),
-        "out_dir": str(out_dir),
-        "target_code": str(args.target_code),
-        "counts": {
-            "aba_rows": int(len(aba_df)),
-            "resolved_rows": int((resolve_df["SPECIES_CODE"].notna()).sum()),
-            "unresolved_rows": int((resolve_df["SPECIES_CODE"].isna()).sum()),
-            "selected_code_rows": int(resolve_df["ABA_CODE"].astype(str).str.match(rf"^\s*{re.escape(str(args.target_code))}\b", na=False).sum()),
-            "species_codes_emitted": int(len(codes)),
-        },
-        "sizes": {
-            "aba5_json": file_size(abaN_json_path),
-            "resolve_csv": file_size(out_dir / "resolve.csv"),
-            "unresolved_names_csv": file_size(out_dir / "unresolved_names.csv"),
-        },
+        "built_at_utc": datetime.now(timezone.utc).isoformat(),
+        "recent_days": back_recent,
+        "scarcity_days": back_scarcity,
+        "national_max": national_max,
+        "per_species_max": per_species_max,
+        "mode": mode,
+        "count_candidates": len(picked),
+        "count_megas": len(points),
+        "aba5_size": len(aba5_codes),
+        "html_bytes": html_path.stat().st_size if html_path.exists() else 0,
     }
-    write_json(summary, out_dir / "summary.json")
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    if len(codes) == 0:
-        print("[error] No species codes emitted for the selected ABA code", file=sys.stderr)
-        sys.exit(7)
+    # Extra guard: ensure no ".{" fragment exists
+    bad = False
+    txt = html_path.read_text(encoding="utf-8", errors="ignore")
+    if re.search(r"(^|\n)\s*\.\{", txt):
+        bad = True
+        print("[error] Found '.{' pattern in generated HTML. This should never happen with this script.", file=sys.stderr)
+    if bad:
+        sys.exit(4)
 
-    print(f"[ok] wrote {len(codes)} species codes to {abaN_json_path}")
+    print(f"[ok] Map wrote {html_path} with {len(points)} markers")
+
 
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except SystemExit as e:
-        raise
-    except Exception as ex:
-        print(f"[error] {ex}", file=sys.stderr)
+    except requests.HTTPError as e:
+        print(f"[error] HTTP {e.response.status_code}: {e.response.text[:500]}", file=sys.stderr)
+        sys.exit(10)
+    except Exception as e:
+        print(f"[error] {e}", file=sys.stderr)
         sys.exit(1)
