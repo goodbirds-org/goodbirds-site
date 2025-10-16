@@ -2,7 +2,7 @@ name: Build US+Canada Mega-Rarities Map
 
 on:
   schedule:
-    - cron: "13 9 * * *"   # Daily 09:13 UTC
+    - cron: "13 9 * * *"
   workflow_dispatch:
     inputs:
       skip_commit:
@@ -59,7 +59,6 @@ jobs:
           test -f scripts/data/eBird_taxonomy_v2024.csv
           mkdir -p docs/mega
 
-      # Build the ABA Code 5 list and supporting diagnostics
       - name: Build ABA-5 species list and diagnostics
         run: |
           set -euxo pipefail
@@ -78,13 +77,11 @@ jobs:
           echo "----- file listing -----"
           ls -lh docs/mega
           echo "------------------------"
-          # Fail if empty
           if [ "$(jq 'length' docs/mega/aba5.json)" -eq 0 ]; then
-            echo "❌ aba5.json is empty - check column headers or regex."
+            echo "aba5.json is empty"
             exit 1
           fi
 
-      # Generate the interactive map
       - name: Build mega map
         env:
           EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
@@ -129,3 +126,4 @@ jobs:
             git commit -m "Build US+Canada mega-rarities map (${GITHUB_RUN_ID})"
             git pull --rebase || true
             git push
+          fi
