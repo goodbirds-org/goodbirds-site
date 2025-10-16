@@ -2,24 +2,23 @@
 """
 Build the Mega map HTML and summary from ABA Code-5 species and recent eBird 'notable' data.
 
-Inputs:
-  --aba_csv           Path to ABA checklist CSV (not strictly required for map if docs/mega/aba5.json exists)
-  --taxonomy_csv      Path to eBird taxonomy CSV (not strictly required for map build itself)
-  --out_dir           Output dir, default docs/mega
-  --target_code       ABA code to select, default 5
-
 Environment:
-  EBIRD_API_KEY               required to call eBird API
-  MEGA_MODE                   "aba5_only" | "union" (union may add nationally scarce notables)
-  MEGA_BACK_DAYS_RECENT       integer days for recent notables (default 1)
-  MEGA_BACK_DAYS_SCARCITY     integer days for scarcity window (default 365)
-  MEGA_NATIONAL_MAX           cap on total markers (default 25)
-  MEGA_PER_SPECIES_MAX        cap per species (default 2)
+  EBIRD_API_KEY               required
+  MEGA_MODE                   "aba5_only" | "union"
+  MEGA_BACK_DAYS_RECENT       integer (default 1)
+  MEGA_BACK_DAYS_SCARCITY     integer (default 365)  # reserved for future
+  MEGA_NATIONAL_MAX           integer (default 25)
+  MEGA_PER_SPECIES_MAX        integer (default 2)
+
+CLI (paths needed by upstream, safe to ignore during map build):
+  --aba_csv, --taxonomy_csv   not used by this script’s fetch
+  --out_dir                   default docs/mega
+  --target_code               default 5
 
 Outputs:
-  docs/mega/index.html        Folium map
-  docs/mega/summary.json      Build stats
-  docs/mega/aba5.json         Code-5 species list (must exist already or be generated upstream)
+  docs/mega/index.html
+  docs/mega/summary.json
+  (requires docs/mega/aba5.json to already exist)
 """
 
 import argparse
@@ -27,14 +26,34 @@ import json
 import os
 import re
 import sys
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from collections import defaultdict
 
 import requests
 import folium
 from folium.plugins import MarkerCluster
 
+# ---- Config -----------------------------------------------------------------
+
+US_STATES = [
+    "US-AL","US-AK","US-AZ","US-AR","US-CA","US-CO","US-CT","US-DE","US-FL","US-GA",
+    "US-HI","US-ID","US-IL","US-IN","US-IA","US-KS","US-KY","US-LA","US-ME","US-MD",
+    "US-MA","US-MI","US-MN","US-MS","US-MO","US-MT","US-NE","US-NV","US-NH","US-NJ",
+    "US-NM","US-NY","US-NC","US-ND","US-OH","US-OK","US-OR","US-PA","US-RI","US-SC",
+    "US-SD","US-TN","US-TX","US-UT","US-VT","US-VA","US-WA","US-WV","US-WI","US-WY",
+    "US-DC","US-PR"  # include DC and Puerto Rico for coverage
+]
+
+CA_PROVINCES = [
+    "CA-AB","CA-BC","CA-MB","CA-NB","CA-NL","CA-NS","CA-NT","CA-NU","CA-ON","CA-PE",
+    "CA-QC","CA-SK","CA-YT"
+]
+
+MAX_RESULTS = 10000  # eBird hard limit
+
+# ---- Helpers ----------------------------------------------------------------
 
 def getenv_int(name, default):
     try:
@@ -42,14 +61,12 @@ def getenv_int(name, default):
     except Exception:
         return default
 
-
 def ebird_headers():
     api_key = os.getenv("EBIRD_API_KEY", "").strip()
     if not api_key:
         print("[error] EBIRD_API_KEY is missing", file=sys.stderr)
         sys.exit(2)
     return {"X-eBirdApiToken": api_key}
-
 
 def load_aba5(out_dir: Path):
     p = out_dir / "aba5.json"
@@ -64,45 +81,9 @@ def load_aba5(out_dir: Path):
     if not isinstance(data, list):
         print("[error] aba5.json must be a list of species codes", file=sys.stderr)
         sys.exit(3)
-    # normalize to lower
     return sorted({str(x).lower().strip() for x in data if str(x).strip()})
 
-
-def fetch_recent_notables_us_ca(back_days):
-    """
-    Correct eBird endpoint:
-      GET /v2/data/obs/{regionCode}/recent/notable
-    We call it for US and CA separately and combine.
-    """
-    base = "https://api.ebird.org/v2/data/obs"
-    params = {"detail": "full", "back": back_days, "maxResults": 20000}
-    out = []
-    for region in ("US", "CA"):
-        url = f"{base}/{region}/recent/notable"
-        try:
-            r = requests.get(url, headers=ebird_headers(), params=params, timeout=60)
-            if r.status_code == 404:
-                # Show the exact URL in logs so it’s obvious what failed
-                raise requests.HTTPError(f"404 from {url}", response=r)
-            r.raise_for_status()
-        except requests.HTTPError as e:
-            body = ""
-            try:
-                body = r.text[:500]
-            except Exception:
-                pass
-            print(f"[error] HTTP {r.status_code} at {url}\n{body}", file=sys.stderr)
-            raise
-        out.extend(r.json())
-    return out
-
-
-def norm_species_code(s: str) -> str:
-    return (s or "").strip().lower()
-
-
 def pick_recent_fields(rec):
-    # Select only what we render or use for tooltips
     return {
         "comName": rec.get("comName"),
         "sciName": rec.get("sciName"),
@@ -114,37 +95,78 @@ def pick_recent_fields(rec):
         "howMany": rec.get("howMany"),
         "countryCode": rec.get("countryCode"),
         "subnational1Code": rec.get("subnational1Code"),
-        "speciesCode": norm_species_code(rec.get("speciesCode")),
+        "speciesCode": (rec.get("speciesCode") or "").strip().lower(),
     }
 
+def fetch_region_notables(region, back_days):
+    url = f"https://api.ebird.org/v2/data/obs/{region}/recent/notable"
+    params = {"detail": "full", "back": back_days, "maxResults": MAX_RESULTS}
+    r = requests.get(url, headers=ebird_headers(), params=params, timeout=60)
+    if r.status_code == 400:
+        # Show body for “too_many_results”
+        print(f"[warn] 400 at {url}: {r.text[:500]}", file=sys.stderr)
+    r.raise_for_status()
+    return r.json()
+
+def fetch_recent_notables_sharded(back_days, sleep_ms=120):
+    """
+    Shard across US states and CA provinces to stay under the per-request 10,000 row cap.
+    """
+    out = []
+    seen = set()  # de-dup by (subId, speciesCode) where possible
+    regions = US_STATES + CA_PROVINCES
+    for i, region in enumerate(regions, 1):
+        try:
+            data = fetch_region_notables(region, back_days)
+        except requests.HTTPError as e:
+            # Log and continue; one region failing should not kill the map
+            status = getattr(e.response, "status_code", "?")
+            body = ""
+            try:
+                body = e.response.text[:300]
+            except Exception:
+                pass
+            print(f"[error] HTTP {status} for {region}: {body}", file=sys.stderr)
+            continue
+
+        for rec in data:
+            key = (rec.get("subId"), (rec.get("speciesCode") or "").lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(rec)
+
+        # small delay to be nice to eBird
+        time.sleep(sleep_ms / 1000.0)
+
+        if i % 10 == 0:
+            print(f"[info] fetched {i}/{len(regions)} regions, cumulative {len(out)} records")
+
+    return out
 
 def cap_records(records, per_species_max, national_max):
     by_species = defaultdict(list)
+
+    def obs_dt_key(r):
+        # ISO-like strings sort lexicographically as desired
+        return r.get("obsDt") or ""
+
     for rec in records:
         sc = rec.get("speciesCode")
         if sc:
             by_species[sc].append(rec)
-
-    # sort by observation date descending within species, keep top per_species_max
-    def obs_dt_key(r):
-        # r["obsDt"] example "2025-10-09 08:07"
-        s = r.get("obsDt") or ""
-        return s
 
     trimmed = []
     for sc, recs in by_species.items():
         recs_sorted = sorted(recs, key=obs_dt_key, reverse=True)
         trimmed.extend(recs_sorted[:per_species_max])
 
-    # If we exceed national_max, keep the freshest overall
     if len(trimmed) > national_max:
         trimmed = sorted(trimmed, key=obs_dt_key, reverse=True)[:national_max]
 
     return trimmed
 
-
 def build_map_html(out_dir: Path, points):
-    # Use Folium cleanly. No template injection. No stray ".{"
     m = folium.Map(
         location=[45.0, -96.0],
         zoom_start=4,
@@ -157,8 +179,7 @@ def build_map_html(out_dir: Path, points):
     cluster = MarkerCluster().add_to(m)
 
     for r in points:
-        lat = r.get("lat")
-        lng = r.get("lng")
+        lat = r.get("lat"); lng = r.get("lng")
         if lat is None or lng is None:
             continue
         name = r.get("comName") or "(unknown)"
@@ -174,6 +195,7 @@ def build_map_html(out_dir: Path, points):
           {"<a href='" + href + "' target='_blank' rel='noopener'>Open checklist</a>" if href else ""}
         </div>
         """.strip()
+
         folium.CircleMarker(
             location=[lat, lng],
             radius=7,
@@ -190,11 +212,12 @@ def build_map_html(out_dir: Path, points):
     m.save(str(out_path))
     return out_path
 
+# ---- Main -------------------------------------------------------------------
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--aba_csv", required=False, help="Path to ABA checklist CSV (not required for map if aba5.json exists)")
-    ap.add_argument("--taxonomy_csv", required=False, help="Path to eBird taxonomy CSV (not required for map build)")
+    ap.add_argument("--aba_csv", required=False)
+    ap.add_argument("--taxonomy_csv", required=False)
     ap.add_argument("--out_dir", default="docs/mega")
     ap.add_argument("--target_code", default="5")
     args = ap.parse_args()
@@ -202,34 +225,34 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Inputs and caps
     mode = os.getenv("MEGA_MODE", "aba5_only").strip()
     back_recent = getenv_int("MEGA_BACK_DAYS_RECENT", 1)
-    back_scarcity = getenv_int("MEGA_BACK_DAYS_SCARCITY", 365)  # kept for future logic
+    back_scarcity = getenv_int("MEGA_BACK_DAYS_SCARCITY", 365)
     national_max = getenv_int("MEGA_NATIONAL_MAX", 25)
     per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 2)
 
-    # Load ABA-5 list
+    # Load ABA-5 species codes and normalize
     aba5_codes = load_aba5(out_dir)
+    aba5_set = set(aba5_codes)
 
-    # Fetch recent notables
-    raw = fetch_recent_notables_us_ca(back_recent)
+    # Fetch sharded recent notables
+    raw = fetch_recent_notables_sharded(back_recent)
+
+    # Project fields we need
     picked = [pick_recent_fields(r) for r in raw]
 
     # Filter by mode
     if mode == "aba5_only":
-        picked = [r for r in picked if r.get("speciesCode") in aba5_codes]
-    else:
-        # union mode can include all notables, but still keep any that are ABA5
-        pass
+        picked = [r for r in picked if r.get("speciesCode") in aba5_set]
+    # else union mode keeps all notables
 
-    # Apply caps
+    # Apply caps to keep the page small and fast
     points = cap_records(picked, per_species_max=per_species_max, national_max=national_max)
 
     # Build map
     html_path = build_map_html(out_dir, points)
 
-    # Summary
+    # Summary for debugging
     summary = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         "recent_days": back_recent,
@@ -237,6 +260,7 @@ def main():
         "national_max": national_max,
         "per_species_max": per_species_max,
         "mode": mode,
+        "count_raw": len(raw),
         "count_candidates": len(picked),
         "count_megas": len(points),
         "aba5_size": len(aba5_codes),
@@ -244,23 +268,19 @@ def main():
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    # Extra guard: ensure no ".{" fragment exists
-    bad = False
+    # Guard against broken HTML injection
     txt = html_path.read_text(encoding="utf-8", errors="ignore")
     if re.search(r"(^|\n)\s*\.\{", txt):
-        bad = True
-        print("[error] Found '.{' pattern in generated HTML. This should never happen with this script.", file=sys.stderr)
-    if bad:
+        print("[error] Found '.{' pattern in generated HTML. This should never happen.", file=sys.stderr)
         sys.exit(4)
 
     print(f"[ok] Map wrote {html_path} with {len(points)} markers")
 
-
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except requests.HTTPError as e:
-        # If we get here, fetch_recent_notables_us_ca already printed the URL and a snippet of the body
+    except requests.HTTPError:
+        # fetch function already printed details
         sys.exit(10)
     except Exception as e:
         print(f"[error] {e}", file=sys.stderr)
