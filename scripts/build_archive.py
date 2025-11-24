@@ -92,6 +92,14 @@ html = f"""<!doctype html>
 <meta http-equiv="Expires" content="0">
 <meta http-equiv="refresh" content="300">
 <title>{escape(city_title)} - Archive</title>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-NYEBPC2JEZ');
+</script>
 <style>
   :root {{
     --ink:#111; --muted:#555; --line:#e5e5e5; --bg:#fafafa; --card:#fff; --radius:14px;

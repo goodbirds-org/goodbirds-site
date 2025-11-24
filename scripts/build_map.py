@@ -362,6 +362,18 @@ def prune_archive(dirpath: str, keep: int = 30) -> int:
 
 def save_and_publish(m, outfile: str):
     m.save(outfile)
+        # Append Google Analytics 4 tracking code
+    with open(outfile, "a", encoding="utf-8") as f:
+        f.write("""
+            <!-- Google tag (gtag.js) -->
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+            <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-NYEBPC2JEZ');
+            </script>
+            """)
     print(f"Map saved as '{outfile}'")
     latest_path = os.path.join(output_dir, "latest.html")
     try:
