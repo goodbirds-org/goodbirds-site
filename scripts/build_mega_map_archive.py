@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 import argparse
 import csv
@@ -8,14 +7,14 @@ import re
 import sys
 import time
 import unicodedata
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import folium
 import requests
-from folium.plugins import FastMarkerCluster, MarkerCluster, Fullscreen, LocateControl, MousePosition
+from folium.plugins import FastMarkerCluster, MarkerCluster
 
 # --------------------- Region sharding ---------------------
 
@@ -33,7 +32,7 @@ CA_PROVINCES = [
 ]
 MAX_RESULTS = 10000  # eBird hard limit per request
 FAST_CLUSTER_SWITCH = 800
-HARD_FAIL_THRESHOLD = 20000  # raise since we're aggregating more
+HARD_FAIL_THRESHOLD = 2000
 
 # --------------------- Small utils ---------------------
 
@@ -267,101 +266,6 @@ def fetch_recent_notables_sharded(back_days: int, sleep_ms: int = 120) -> List[d
             print(f"[info] fetched {i}/{len(regions)} regions, cumulative {len(out)} records")
     return out
 
-# --------------------- Helper: load ABA code4/5 sets ---------------------
-
-def _load_json_list(p: Path) -> Set[str]:
-    try:
-        return set(json.loads(p.read_text(encoding="utf-8")))
-    except Exception:
-        return set()
-
-def load_code_sets(preferred_dir: Path) -> Tuple[Set[str], Set[str]]:
-    """
-    Returns (code4_set, code5_set) of speciesCode strings.
-    Looks in preferred_dir first, then CWD.
-    """
-    cand4 = [preferred_dir / "aba4.json", Path("aba4.json")]
-    cand5 = [preferred_dir / "aba5.json", Path("aba5.json")]
-    code4 = set()
-    code5 = set()
-    for c in cand4:
-        if c.exists():
-            code4 = _load_json_list(c)
-            break
-    for c in cand5:
-        if c.exists():
-            code5 = _load_json_list(c)
-            break
-    return (set([s.lower() for s in code4]), set([s.lower() for s in code5]))
-
-# --------------------- Map UI helpers (borrowed from city maps) ---------------------
-
-def build_info_ui(map_title: str, logo_src: str, recent_days: int) -> str:
-    legend = """
-      <div style='margin-top:8px'>
-        <div style='display:flex; align-items:center; gap:8px; margin:4px 0'>
-          <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:#f1c40f; border:1.5px solid #222;'></span>
-          <span>ABA Code 4</span>
-        </div>
-        <div style='display:flex; align-items:center; gap:8px; margin:4px 0'>
-          <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:#d32f2f; border:1.5px solid #222;'></span>
-          <span>ABA Code 5</span>
-        </div>
-      </div>
-    """
-    html = f"""
-    <style>
-      .gb-info-btn {{
-        position: fixed; left: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 50%;
-        background: #ffffff; border: 1px solid #999; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-        z-index: 1201; display: flex; align-items: center; justify-content: center;
-        font: 700 18px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        cursor: pointer; user-select: none;
-      }}
-      .gb-info-btn:focus {{ outline: 2px solid #2c7fb8; }}
-      .gb-info-panel {{
-        position: fixed; left: 16px; bottom: 70px; z-index: 1200;
-        background: rgba(255,255,255,0.98); border: 1px solid #999; border-radius: 10px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3); padding: 12px; width: min(92vw, 360px);
-        max-height: 70vh; display: none;
-      }}
-      .gb-info-header {{ display: grid; grid-template-columns: auto 1fr; grid-gap: 12px; align-items: center; }}
-      .gb-info-title {{ font-weight: 700; font-size: 16px; margin: 0; }}
-      .gb-info-meta {{ font-size: 13px; margin-top: 2px; }}
-    </style>
-
-    <div class="gb-info-btn" id="gbInfoBtn" role="button" aria-label="Show map info" aria-expanded="false">i</div>
-
-    <div class="gb-info-panel" id="gbInfoPanel" aria-hidden="true">
-      <div class="gb-info-header">
-        <div><img src='{logo_src}' alt='Goodbirds logo' style='height:100px;display:block;'></div>
-        <div>
-          <h3 class="gb-info-title">{map_title}</h3>
-          <div class="gb-info-meta">eBird Notable – last {recent_days} day(s)</div>
-          {legend}
-        </div>
-      </div>
-    </div>
-
-    <script>
-      (function(){{
-        var btn = document.getElementById('gbInfoBtn');
-        var panel = document.getElementById('gbInfoPanel');
-        function openPanel(){{ panel.style.display='block'; btn.setAttribute('aria-expanded','true'); panel.setAttribute('aria-hidden','false'); }}
-        function closePanel(){{ panel.style.display='none'; btn.setAttribute('aria-expanded','false'); panel.setAttribute('aria-hidden','true'); }}
-        btn.addEventListener('click', function(){{ panel.style.display==='block' ? closePanel() : openPanel(); }});
-        document.addEventListener('click', function(e){{ if(!panel.contains(e.target) && e.target!==btn) closePanel(); }});
-      }})();
-    </script>
-    """
-    return html
-
-def guess_logo_src() -> str:
-    for p in ("docs/goodbirds_logo_text.png", "goodbirds_logo_text.png", "/goodbirds_logo_text.png"):
-        if os.path.isfile(p) or p.startswith("/"):
-            return p
-    return "/goodbirds_logo_text.png"
-
 # --------------------- Capping and map building ---------------------
 
 def cap_records(records: List[dict], per_species_max: int, national_max: int) -> List[dict]:
@@ -375,15 +279,12 @@ def cap_records(records: List[dict], per_species_max: int, national_max: int) ->
     trimmed: List[dict] = []
     for sc, recs in by_species.items():
         recs_sorted = sorted(recs, key=obs_dt_key, reverse=True)
-        if per_species_max <= 0:
-            trimmed.extend(recs_sorted)
-        else:
-            trimmed.extend(recs_sorted[:per_species_max])
-    if national_max > 0 and len(trimmed) > national_max:
+        trimmed.extend(recs_sorted[:per_species_max])
+    if len(trimmed) > national_max:
         trimmed = sorted(trimmed, key=obs_dt_key, reverse=True)[:national_max]
     return trimmed
 
-def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Set[str], recent_days: int, map_title: str) -> Path:
+def build_map_html(out_dir: Path, points: List[dict]) -> Path:
     m = folium.Map(
         location=[45.0, -96.0],
         zoom_start=4,
@@ -392,78 +293,39 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
         tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         attr="&copy; OpenStreetMap contributors",
     )
-
-    # Basic controls similar to city maps
-    Fullscreen().add_to(m)
-    LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
-    MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
-
-    # Info popup with legend
-    logo_src = guess_logo_src()
-    m.get_root().html.add_child(folium.Element(build_info_ui(map_title, logo_src, recent_days)))
-
-    # Group records by (lat,lng,species) and aggregate all checklists
-    agg = defaultdict(list)
-    meta_for_key = {}
-    for r in points:
-        lat = r.get("lat"); lng = r.get("lng")
-        sc = (r.get("speciesCode") or "").lower()
-        if lat is None or lng is None or not sc:
-            continue
-        key = (round(lat, 6), round(lng, 6), sc)
-        agg[key].append(r)
-        if key not in meta_for_key:
-            meta_for_key[key] = {
-                "comName": r.get("comName") or "(unknown)",
-                "locName": r.get("locName") or "",
-                "code": 4 if sc in code4 else 5 if sc in code5 else None,
-            }
-
-    # Build markers
-    cluster = MarkerCluster().add_to(m)
-    for key, recs in agg.items():
-        lat, lng, sc = key
-        meta = meta_for_key[key]
-        com_name = meta["comName"]
-        loc_name = meta["locName"]
-        code = meta["code"]
-
-        # dedupe checklists
-        seen = set()
-        items = []
-        for rec in sorted(recs, key=lambda x: x.get("obsDt") or "", reverse=True):
-            cid = rec.get("subId")
-            if not cid or cid in seen:
+    if len(points) >= FAST_CLUSTER_SWITCH:
+        coords = [(p["lat"], p["lng"]) for p in points if p.get("lat") is not None and p.get("lng") is not None]
+        FastMarkerCluster(coords).add_to(m)
+    else:
+        cluster = MarkerCluster().add_to(m)
+        for r in points:
+            lat = r.get("lat"); lng = r.get("lng")
+            if lat is None or lng is None:
                 continue
-            seen.add(cid)
-            dt = rec.get("obsDt") or ""
-            how_many = rec.get("howMany")
-            count_txt = f" ({how_many})" if how_many not in (None, "Unknown") else ""
-            items.append(f"<li><a href='https://ebird.org/checklist/{cid}' target='_blank' rel='noopener'>Checklist</a> – {dt}{count_txt}</li>")
-        lst = "<ul style='margin:6px 0 0 16px; padding:0;'>" + "".join(items) + "</ul>" if items else "<div>No checklists.</div>"
-
-        popup_html = (
-            "<div style='font-size:13px;'>"
-            f"<div><b>{com_name}</b> – ABA Code {code if code else '?'}</div>"
-            f"<div><b>Location:</b> {loc_name}</div>"
-            "<div style='margin-top:6px; font-weight:600;'>Checklists:</div>"
-            f"{lst}</div>"
-        )
-
-        # marker color
-        if code == 4:
-            bg = "#f1c40f"  # yellow
-        elif code == 5:
-            bg = "#d32f2f"  # red
-        else:
-            bg = "#444444"
-
-        icon = folium.DivIcon(html=f"<div style='width:14px;height:14px;border-radius:50%;background:{bg};border:1.5px solid #222;'></div>",
-                              icon_size=(14, 14), icon_anchor=(7, 7))
-
-        folium.Marker([lat, lng], icon=icon, tooltip=com_name,
-                      popup=folium.Popup(popup_html, max_width=320)).add_to(cluster)
-
+            name = r.get("comName") or "(unknown)"
+            loc = r.get("locName") or ""
+            when = r.get("obsDt") or ""
+            sub = r.get("subId")
+            href = f"https://ebird.org/checklist/{sub}" if sub else None
+            popup_html = f"""
+            <div>
+              <b>{name}</b><br>
+              {loc}<br>
+              <small>{when}</small><br>
+              {"<a href='" + href + "' target='_blank' rel='noopener'>Open checklist</a>" if href else ""}
+            </div>
+            """.strip()
+            folium.CircleMarker(
+                location=[lat, lng],
+                radius=6,
+                color="darkred",
+                weight=2,
+                fill=True,
+                fill_color="darkred",
+                fill_opacity=0.85,
+            ).add_to(cluster).add_child(folium.Popup(popup_html, max_width=280)).add_child(
+                folium.Tooltip(f"{name} • {loc}", sticky=True)
+            )
     out_path = out_dir / "index.html"
     m.save(str(out_path))
     return out_path
@@ -471,23 +333,21 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
 # --------------------- Main ---------------------
 
 def main():
-    ap = argparse.ArgumentParser(description="Build Mega map with ABA Code 4 and 5, multi-checklist popups, and info legend")
+    ap = argparse.ArgumentParser(description="Build Mega map with ABA Code filters")
     ap.add_argument("--aba_csv", required=True, help="Path to ABA checklist CSV")
     ap.add_argument("--taxonomy_csv", required=True, help="Path to eBird taxonomy CSV")
     ap.add_argument("--out_dir", default="docs/mega", help="Output directory")
-    ap.add_argument("--codes", default="4,5", help="Comma-separated ABA codes to include, e.g. '5' or '4,5'")
-    ap.add_argument("--map_title", default="Goodbirds Mega Map", help="Title shown in the info panel")
+    ap.add_argument("--codes", default="5", help="Comma-separated ABA codes to include, e.g. '5' or '4,5'")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Inputs and caps via env
-    mode = os.getenv("MEGA_MODE", "aba4_5_only").strip() or "aba4_5_only"
-    back_recent = getenv_int("MEGA_BACK_DAYS_RECENT", 2)
-    # Make caps generous so we keep all checklists for code 4/5
-    national_max = getenv_int("MEGA_NATIONAL_MAX", 0)   # 0 means no national cap
-    per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 0)  # 0 means keep all per species
+    mode = os.getenv("MEGA_MODE", "aba5_only").strip() or "aba5_only"
+    back_recent = getenv_int("MEGA_BACK_DAYS_RECENT", 1)
+    national_max = getenv_int("MEGA_NATIONAL_MAX", 60)
+    per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 1)
 
     # Build allowed species list from ABA + taxonomy
     try:
@@ -500,27 +360,24 @@ def main():
     )
     allowed_set = set(allowed_set)  # species codes, lowercase
 
-    # Also read per-code sets so we can color markers by code
-    code4_set, code5_set = load_code_sets(out_dir)
-
     # Fetch notables sharded
     raw = fetch_recent_notables_sharded(back_recent)
     picked = [pick_recent_fields(r) for r in raw]
 
     # Filter to allowed species unless union mode is requested
     if mode != "union":
-        picked = [r for r in picked if (r.get("speciesCode") or "").lower() in allowed_set]
+        picked = [r for r in picked if r.get("speciesCode") in allowed_set]
 
-    # Apply caps (0 means keep all)
+    # Apply caps
     points = cap_records(picked, per_species_max=per_species_max, national_max=national_max)
 
     # Hard guard
-    if 0 < HARD_FAIL_THRESHOLD < len(points):
+    if len(points) > HARD_FAIL_THRESHOLD:
         print(f"[error] Too many points after caps: {len(points)} - tighten filters or caps", file=sys.stderr)
         sys.exit(5)
 
     # Build map
-    html_path = build_map_html(out_dir, points, code4_set, code5_set, back_recent, args.map_title)
+    html_path = build_map_html(out_dir, points)
 
     # Summary
     summary = {
@@ -544,7 +401,7 @@ def main():
         print("[error] Found '.{' in generated HTML", file=sys.stderr)
         sys.exit(4)
 
-    print(f"[ok] Map wrote {html_path} with {len(points)} aggregated markers - codes={sorted(list(target_codes))}")
+    print(f"[ok] Map wrote {html_path} with {len(points)} markers - codes={sorted(list(target_codes))}")
 
 if __name__ == "__main__":
     try:
