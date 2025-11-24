@@ -368,10 +368,10 @@ def save_and_publish(m, outfile: str):
             <!-- Google tag (gtag.js) -->
             <script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
             <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-NYEBPC2JEZ');
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){{dataLayer.push(arguments);}}
+                gtag('js', new Date());
+                gtag('config', 'G-NYEBPC2JEZ');
             </script>
             """)
     print(f"Map saved as '{outfile}'")
