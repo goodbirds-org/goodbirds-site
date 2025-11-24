@@ -15,7 +15,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import folium
 import requests
-from folium.plugins import FastMarkerCluster, MarkerCluster, Fullscreen, LocateControl, MousePosition
+from folium.plugins import MarkerCluster, Fullscreen, LocateControl, MousePosition
 
 # --------------------- Region sharding ---------------------
 
@@ -31,9 +31,8 @@ CA_PROVINCES = [
     "CA-AB","CA-BC","CA-MB","CA-NB","CA-NL","CA-NS","CA-NT","CA-NU","CA-ON","CA-PE",
     "CA-QC","CA-SK","CA-YT"
 ]
-MAX_RESULTS = 10000  # eBird hard limit per request
-FAST_CLUSTER_SWITCH = 800
-HARD_FAIL_THRESHOLD = 20000  # raise since we're aggregating more
+MAX_RESULTS = 10000
+HARD_FAIL_THRESHOLD = 20000
 
 # --------------------- Small utils ---------------------
 
@@ -59,7 +58,7 @@ def normalize_name(s: Optional[str]) -> str:
     if not s:
         return ""
     s = unicodedata.normalize("NFKD", str(s)).strip().lower()
-    s = re.sub(r"\([^)]*\)", "", s)  # drop parentheticals
+    s = re.sub(r"\([^)]*\)", "", s)
     s = PUNCT_RE.sub(" ", s)
     s = SPACES_RE.sub(" ", s).strip()
     return s
@@ -102,20 +101,14 @@ def load_allowed_species_codes(
     out_dir: Path,
     target_codes: Set[int]
 ) -> Tuple[Set[str], Dict[int, int]]:
-    """
-    Read ABA checklist, pick rows whose code column starts with any of target_codes,
-    map common names to eBird SPECIES_CODE via taxonomy, and write per-code JSONs plus merged set.
-    Returns the merged allowed set, and a small count dict per code.
-    """
     if not aba_csv.exists() or not taxonomy_csv.exists():
         print("[error] ABA or taxonomy CSV not found", file=sys.stderr)
         sys.exit(3)
 
-    # Load taxonomy mapping: normalized primary common name -> species_code
     with taxonomy_csv.open(encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
         tax_rows = list(reader)
-    # find columns
+
     tax_header = list(tax_rows[0].keys()) if tax_rows else []
     name_cand = None
     for cand in ["PRIMARY_COM_NAME","PRIMARY COM NAME","ENGLISH_NAME","English Name","Common Name"]:
@@ -124,7 +117,6 @@ def load_allowed_species_codes(
             break
     spc_col = "SPECIES_CODE"
     if name_cand is None or spc_col not in tax_header:
-        # try case-insensitive fallback
         upper_map = {c.upper(): c for c in tax_header}
         name_cand = upper_map.get("PRIMARY_COM_NAME") or upper_map.get("ENGLISH_NAME")
         spc_col = upper_map.get("SPECIES_CODE", spc_col)
@@ -139,10 +131,10 @@ def load_allowed_species_codes(
         if nm and sc:
             name_to_code[nm] = sc
 
-    # Load ABA checklist and detect columns
     raw = aba_csv.read_text(encoding="utf-8", errors="replace").splitlines()
     header_idx = None
     delim = ","
+
     def looks_like_header(line: str, sep: str) -> bool:
         toks = [t.strip().strip('"').lower() for t in line.split(sep)]
         if len(toks) < 3:
@@ -169,9 +161,8 @@ def load_allowed_species_codes(
         print(f"[error] Could not detect ABA columns. Header: {rdr.fieldnames}", file=sys.stderr)
         sys.exit(3)
 
-    # Build sets per code and merged
     per_code_map: Dict[int, Set[str]] = {c: set() for c in target_codes}
-    code_matcher = re.compile(r"^\s*(\d)\b")  # accepts 4, 4*, 4?, 4.0 etc.
+    code_matcher = re.compile(r"^\s*(\d)\b")
     unresolved = []
 
     for r in rdr:
@@ -193,21 +184,18 @@ def load_allowed_species_codes(
         else:
             unresolved.append(nm)
 
-    # Write per-code and merged JSONs
     out_dir.mkdir(parents=True, exist_ok=True)
     allowed: Set[str] = set()
     for c in sorted(target_codes):
         codes_sorted = sorted(per_code_map[c])
         (out_dir / f"aba{c}.json").write_text(json.dumps(codes_sorted, indent=2), encoding="utf-8")
         allowed.update(codes_sorted)
-    # keep old filename for backward compatibility
     (out_dir / "aba_allowed.json").write_text(json.dumps(sorted(allowed), indent=2), encoding="utf-8")
     if 5 in target_codes:
         (out_dir / "aba5.json").write_text(json.dumps(sorted(per_code_map[5]), indent=2), encoding="utf-8")
 
     counts = {c: len(per_code_map[c]) for c in sorted(target_codes)}
     if unresolved:
-        # optional debug list
         with (out_dir / "unresolved_names.csv").open("w", encoding="utf-8", newline="") as f:
             w = csv.writer(f); w.writerow(["UNRESOLVED_COMMON_NAME"])
             for nm in sorted(set(unresolved)):
@@ -276,25 +264,19 @@ def _load_json_list(p: Path) -> Set[str]:
         return set()
 
 def load_code_sets(preferred_dir: Path) -> Tuple[Set[str], Set[str]]:
-    """
-    Returns (code4_set, code5_set) of speciesCode strings.
-    Looks in preferred_dir first, then CWD.
-    """
-    cand4 = [preferred_dir / "aba4.json", Path("aba4.json")]
-    cand5 = [preferred_dir / "aba5.json", Path("aba5.json")]
+    cand4 = [preferred_dir / "aba4.json", Path("docs/mega/aba4.json"), Path("aba4.json")]
+    cand5 = [preferred_dir / "aba5.json", Path("docs/mega/aba5.json"), Path("aba5.json")]
     code4 = set()
     code5 = set()
     for c in cand4:
         if c.exists():
-            code4 = _load_json_list(c)
-            break
+            code4 = _load_json_list(c); break
     for c in cand5:
         if c.exists():
-            code5 = _load_json_list(c)
-            break
-    return (set([s.lower() for s in code4]), set([s.lower() for s in code5]))
+            code5 = _load_json_list(c); break
+    return ({s.lower() for s in code4}, {s.lower() for s in code5})
 
-# --------------------- Map UI helpers (borrowed from city maps) ---------------------
+# --------------------- Map UI helpers ---------------------
 
 def build_info_ui(map_title: str, logo_src: str, recent_days: int) -> str:
     legend = """
@@ -393,16 +375,14 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
         attr="&copy; OpenStreetMap contributors",
     )
 
-    # Basic controls similar to city maps
     Fullscreen().add_to(m)
     LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
     MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
 
-    # Info popup with legend
     logo_src = guess_logo_src()
     m.get_root().html.add_child(folium.Element(build_info_ui(map_title, logo_src, recent_days)))
 
-    # Group records by (lat,lng,species) and aggregate all checklists
+    # Group by (lat,lng,species) and aggregate all checklists
     agg = defaultdict(list)
     meta_for_key = {}
     for r in points:
@@ -419,14 +399,17 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
                 "code": 4 if sc in code4 else 5 if sc in code5 else None,
             }
 
-    # Build markers
     cluster = MarkerCluster().add_to(m)
     for key, recs in agg.items():
         lat, lng, sc = key
         meta = meta_for_key[key]
+        code = meta["code"]
+        if code not in (4, 5):
+            # Safety: do not draw anything that is not explicitly code 4 or 5
+            continue
+
         com_name = meta["comName"]
         loc_name = meta["locName"]
-        code = meta["code"]
 
         # dedupe checklists
         seen = set()
@@ -444,19 +427,16 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
 
         popup_html = (
             "<div style='font-size:13px;'>"
-            f"<div><b>{com_name}</b> – ABA Code {code if code else '?'}</div>"
+            f"<div><b>{com_name}</b> – ABA Code {code}</div>"
             f"<div><b>Location:</b> {loc_name}</div>"
             "<div style='margin-top:6px; font-weight:600;'>Checklists:</div>"
             f"{lst}</div>"
         )
 
-        # marker color
         if code == 4:
-            bg = "#f1c40f"  # yellow
-        elif code == 5:
-            bg = "#d32f2f"  # red
+            bg = "#f1c40f"
         else:
-            bg = "#444444"
+            bg = "#d32f2f"
 
         icon = folium.DivIcon(html=f"<div style='width:14px;height:14px;border-radius:50%;background:{bg};border:1.5px solid #222;'></div>",
                               icon_size=(14, 14), icon_anchor=(7, 7))
@@ -482,28 +462,31 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Inputs and caps via env
     mode = os.getenv("MEGA_MODE", "aba4_5_only").strip() or "aba4_5_only"
     back_recent = getenv_int("MEGA_BACK_DAYS_RECENT", 2)
-    # Make caps generous so we keep all checklists for code 4/5
-    national_max = getenv_int("MEGA_NATIONAL_MAX", 0)   # 0 means no national cap
-    per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 0)  # 0 means keep all per species
+    national_max = getenv_int("MEGA_NATIONAL_MAX", 0)
+    per_species_max = getenv_int("MEGA_PER_SPECIES_MAX", 0)
 
-    # Build allowed species list from ABA + taxonomy
     try:
         target_codes = {int(x.strip()) for x in args.codes.split(",") if x.strip()}
     except Exception:
         print("[error] --codes must be a comma-separated list of integers like '5' or '4,5'", file=sys.stderr)
         sys.exit(2)
+
     allowed_set, per_code_counts = load_allowed_species_codes(
         Path(args.aba_csv), Path(args.taxonomy_csv), out_dir, target_codes
     )
-    allowed_set = set(allowed_set)  # species codes, lowercase
+    allowed_set = {s.lower() for s in allowed_set}
 
-    # Also read per-code sets so we can color markers by code
+    # Load ABA code sets for coloring and final filtering
     code4_set, code5_set = load_code_sets(out_dir)
+    if not code4_set and 4 in target_codes:
+        print("[error] aba4.json did not load or is empty. Aborting to avoid '?' markers.", file=sys.stderr)
+        sys.exit(6)
+    if not code5_set and 5 in target_codes:
+        print("[error] aba5.json did not load or is empty. Aborting to avoid '?' markers.", file=sys.stderr)
+        sys.exit(6)
 
-    # Fetch notables sharded
     raw = fetch_recent_notables_sharded(back_recent)
     picked = [pick_recent_fields(r) for r in raw]
 
@@ -511,18 +494,18 @@ def main():
     if mode != "union":
         picked = [r for r in picked if (r.get("speciesCode") or "").lower() in allowed_set]
 
-    # Apply caps (0 means keep all)
+    # Hard filter: keep ONLY code 4 or 5 species to guarantee no unknowns
+    code45_union = code4_set | code5_set
+    picked = [r for r in picked if (r.get("speciesCode") or "").lower() in code45_union]
+
     points = cap_records(picked, per_species_max=per_species_max, national_max=national_max)
 
-    # Hard guard
     if 0 < HARD_FAIL_THRESHOLD < len(points):
         print(f"[error] Too many points after caps: {len(points)} - tighten filters or caps", file=sys.stderr)
         sys.exit(5)
 
-    # Build map
     html_path = build_map_html(out_dir, points, code4_set, code5_set, back_recent, args.map_title)
 
-    # Summary
     summary = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         "recent_days": back_recent,
@@ -530,7 +513,7 @@ def main():
         "per_species_max": per_species_max,
         "mode": mode,
         "requested_codes": sorted(list(target_codes)),
-        "per_code_counts": per_code_counts,  # how many species matched in ABA per code
+        "per_code_counts": per_code_counts,
         "count_raw": len(raw),
         "count_candidates": len(picked),
         "count_megas": len(points),
@@ -538,7 +521,6 @@ def main():
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    # Guard against malformed HTML injection
     txt = html_path.read_text(encoding="utf-8", errors="ignore")
     if re.search(r"(^|\n)\s*\.\{", txt):
         print("[error] Found '.{' in generated HTML", file=sys.stderr)
@@ -550,7 +532,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except requests.HTTPError as e:
-        # fetch function already logs details
         sys.exit(10)
     except Exception as e:
         print(f"[error] {e}", file=sys.stderr)
