@@ -1,0 +1,53 @@
+name: Post mega map to Bluesky - twice weekly
+
+on:
+  schedule:
+    # 11:00 ET Tuesday and Friday during Daylight Time
+    - cron: "0 15 * * 2"
+    - cron: "0 15 * * 5"
+  workflow_dispatch:
+    inputs:
+      extra_hashtag:
+        description: "Optional extra hashtags (space-separated)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  post-mega:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Capture mega page and post to Bluesky
+        env:
+          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+
+          # Direct URL and text overrides - reuse the same posting script
+          FORCE_MAP_URL: "https://goodbirds.org/mega/index.html"
+          FORCE_POST_TEXT: "Current ABA Code 4 and 5 mega rarities in the ABA Area 🐦 #ebird #birds #rarities"
+          FORCE_ALT_TEXT: "Full page screenshot of the GoodBirds ABA Code 4 and 5 mega rarities page"
+
+          # Optional extras
+          EXTRA_HASHTAG: ${{ github.event.inputs.extra_hashtag }}
+          # DRY_RUN: "1"   # uncomment to test without posting
+          # WAIT_MS: "7000"
+        run: |
+          python scripts/capture_and_post_bsky.py
