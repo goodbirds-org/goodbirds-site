@@ -7,6 +7,8 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import unicodedata
 from collections import defaultdict, OrderedDict
 from datetime import datetime, timezone
@@ -279,6 +281,9 @@ def load_code_sets(preferred_dir: Path) -> Tuple[Set[str], Set[str]]:
 # --------------------- Map UI helpers ---------------------
 
 def build_info_ui(map_title: str, logo_src: str, recent_days: int) -> str:
+    # Eastern time, same style as map pages
+    eastern_now = datetime.now(ZoneInfo("America/New_York"))
+    built_str = eastern_now.strftime("Built: %b %d, %Y %I:%M %p %Z")
     legend = """
       <div style='margin-top:8px'>
         <div style='display:flex; align-items:center; gap:8px; margin:4px 0'>
@@ -319,7 +324,8 @@ def build_info_ui(map_title: str, logo_src: str, recent_days: int) -> str:
         <div><img src='{logo_src}' alt='Goodbirds logo' style='height:100px;display:block;'></div>
         <div>
           <h3 class="gb-info-title">{map_title}</h3>
-          <div class="gb-info-meta">eBird Notable – last {recent_days} day(s)</div>
+          <div class="gb-info-meta">eBird Notable - last {recent_days} day(s)</div>
+          <div class="gb-info-meta">{built_str}</div>
           {legend}
         </div>
       </div>
@@ -339,10 +345,8 @@ def build_info_ui(map_title: str, logo_src: str, recent_days: int) -> str:
     return html
 
 def guess_logo_src() -> str:
-    for p in ("docs/goodbirds_logo_text.png", "goodbirds_logo_text.png", "/goodbirds_logo_text.png"):
-        if os.path.isfile(p) or p.startswith("/"):
-            return p
-    return "/goodbirds_logo_text.png"
+    # Absolute URL for GitHub Pages deployment
+    return "https://goodbirds-org.github.io/goodbirds-site/goodbirds_logo_text.png"
 
 # --------------------- Capping and map building ---------------------
 
