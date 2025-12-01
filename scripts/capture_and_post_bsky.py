@@ -82,11 +82,11 @@ ROTATION = [
         "alt_text": "Full-page screenshot of the most recent Colorado Springs GoodBirds map",
     },
     {
-        "name": "Greensboro",
-        "map_url": "https://goodbirds.org/maps/greensboro/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/greensboro/latest.txt",
-        "post_text": "Latest notable bird sightings in Greensboro 🌳🐦 #ebird #greensboro #birds",
-        "alt_text": "Full-page screenshot of the most recent Greensboro GoodBirds map",
+        "name": "Cape May",
+        "map_url": "https://goodbirds.org/maps/cape-may/latest.html",
+        "latest_txt_url": "https://goodbirds.org/maps/cape-may/latest.txt",
+        "post_text": "Latest notable bird sightings in Cape May, NJ 🏖️🐦 #ebird #capemay #birds",
+        "alt_text": "Full-page screenshot of the most recent Cape May, NJ GoodBirds map",
     },
     {
         "name": "San Francisco",
