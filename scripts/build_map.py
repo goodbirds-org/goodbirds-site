@@ -361,19 +361,36 @@ def prune_archive(dirpath: str, keep: int = 30) -> int:
         return 0
 
 def save_and_publish(m, outfile: str):
+    # Let folium write the base HTML file
     m.save(outfile)
-        # Append Google Analytics 4 tracking code
-    with open(outfile, "a", encoding="utf-8") as f:
-        f.write("""
-            <!-- Google tag (gtag.js) -->
-            <script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
-            <script>
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', 'G-NYEBPC2JEZ');
-            </script>
-            """)
+
+    # Inject Google Analytics 4 tracking code before </body>
+    try:
+        with open(outfile, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        ga_snippet = """
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-NYEBPC2JEZ');
+</script>
+"""
+
+        if "</body>" in html:
+            html = html.replace("</body>", ga_snippet + "\n</body>")
+        else:
+            # Fallback - just append at the end if there is no </body>
+            html = html + ga_snippet
+
+        with open(outfile, "w", encoding="utf-8") as f:
+            f.write(html)
+    except Exception as e:
+        print(f"Warning - could not inject GA into {outfile}: {e}")
+
     print(f"Map saved as '{outfile}'")
     latest_path = os.path.join(output_dir, "latest.html")
     try:
