@@ -19,6 +19,18 @@ import folium
 import requests
 from folium.plugins import MarkerCluster, Fullscreen, LocateControl, MousePosition
 
+GA_SNIPPET = """
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-NYEBPC2JEZ');
+</script>
+"""
+
+
 # --------------------- Region sharding ---------------------
 
 US_STATES = [
@@ -448,9 +460,23 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
         folium.Marker([lat, lng], icon=icon, tooltip=com_name,
                       popup=folium.Popup(popup_html, max_width=320)).add_to(cluster)
 
-    out_path = out_dir / "index.html"
-    m.save(str(out_path))
+        out_path = out_dir / "index.html"
+        m.save(str(out_path))
+
+    # Inject Google Analytics snippet before </body>
+    try:
+        html = out_path.read_text(encoding="utf-8")
+        if "</body>" in html:
+            html = html.replace("</body>", GA_SNIPPET + "\n</body>")
+        else:
+            # Fallback if Folium output ever changes format
+            html = html + GA_SNIPPET
+        out_path.write_text(html, encoding="utf-8")
+    except Exception as e:
+        print(f"[warn] could not inject GA into {out_path}: {e}", file=sys.stderr)
+
     return out_path
+
 
 # --------------------- Main ---------------------
 
