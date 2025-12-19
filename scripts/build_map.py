@@ -364,11 +364,21 @@ def save_and_publish(m, outfile: str):
     # Let folium write the base HTML file
     m.save(outfile)
 
-    # Inject Google Analytics 4 tracking code before </body>
     try:
         with open(outfile, "r", encoding="utf-8") as f:
             html = f.read()
 
+        # 1) Ensure there is a <title> so GA gets page_title
+        if "<title>" not in html:
+            # MAP_MAIN_TITLE is already defined at the top of this script
+            title_tag = f"<title>{MAP_MAIN_TITLE} - eBird Notable Map</title>\n"
+            if "<head>" in html:
+                html = html.replace("<head>", "<head>\n    " + title_tag, 1)
+            else:
+                # Very unlikely, but fall back to prepending
+                html = title_tag + html
+
+        # 2) Inject Google Analytics 4 tracking code before </body>
         ga_snippet = """
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
@@ -379,17 +389,16 @@ def save_and_publish(m, outfile: str):
   gtag('config', 'G-NYEBPC2JEZ');
 </script>
 """
-
         if "</body>" in html:
-            html = html.replace("</body>", ga_snippet + "\n</body>")
+            html = html.replace("</body>", ga_snippet + "\n</body>", 1)
         else:
-            # Fallback - just append at the end if there is no </body>
             html = html + ga_snippet
 
         with open(outfile, "w", encoding="utf-8") as f:
             f.write(html)
+
     except Exception as e:
-        print(f"Warning - could not inject GA into {outfile}: {e}")
+        print(f"Warning - could not inject GA/title into {outfile}: {e}")
 
     print(f"Map saved as '{outfile}'")
     latest_path = os.path.join(output_dir, "latest.html")
