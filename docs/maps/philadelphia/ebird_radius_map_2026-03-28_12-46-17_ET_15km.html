@@ -19,7 +19,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_b7379a4cab3a4f9874a0bb963d91ec0d {
+                #map_010e4930ebb6fc0365f8f0b8b5326c7c {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -58,6 +58,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.66.2/L.Control.Locate.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
 </head>
 <body>
     
@@ -105,7 +108,7 @@
         <div>
           <h3 class="gb-info-title">Philadelphia, PA & Vicinity</h3>
           <div class="gb-info-meta">eBird Notable · 15 km radius · last 2 day(s)</div>
-          <div class="gb-info-row"><span>Built: Mar 13, 2026 12:53 PM EDT</span> <a href="https://goodbirds-org.github.io/goodbirds-site/philadelphia/archive.html" target="_blank" rel="noopener">Archive</a></div>
+          <div class="gb-info-row"><span>Built: Mar 28, 2026 12:46 PM EDT</span> <a href="https://goodbirds-org.github.io/goodbirds-site/philadelphia/archive.html" target="_blank" rel="noopener">Archive</a></div>
         </div>
       </div>
     </div>
@@ -122,16 +125,9 @@
     </script>
     
     
-    <div style="
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
-      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    ">No current notable birds for the selected window.</div>
-    
-    
     <script>
     (function(){
-      var speciesSet = new Set([]);
+      var speciesSet = new Set(['Black-capped Chickadee', 'Black-crowned Night Heron', 'Great Crested Flycatcher', "Virginia's Warbler", 'White-crowned Sparrow']);
       function clearSpecies(){
         var root = document.querySelector('.leaflet-control-layers-overlays');
         if (!root) return;
@@ -156,14 +152,63 @@
       });
       function addWhenReady(){
         if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
-        (new ClearCtl({position:'topright'})).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+        (new ClearCtl({position:'topright'})).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
       }
       addWhenReady();
     })();
     </script>
     
     
-            <div class="folium-map" id="map_b7379a4cab3a4f9874a0bb963d91ec0d" ></div>
+    <script>
+    (function(){
+      var colorMap = {'Black-capped Chickadee': '#2262c3', 'Black-crowned Night Heron': '#5522c3', 'Great Crested Flycatcher': '#22c32a', "Virginia's Warbler": '#4a22c3', 'White-crowned Sparrow': '#22a2c3'};
+
+      function decorate(){
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){
+            if(root.style.display==='none'){ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }
+            else { root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }
+          });
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        });
+        return true;
+      }
+
+      function whenReady(){ if(!decorate()) setTimeout(whenReady,200); }
+      whenReady();
+    })();
+    </script>
+    
+    
+            <div class="folium-map" id="map_010e4930ebb6fc0365f8f0b8b5326c7c" ></div>
         
 
 <!-- Google tag (gtag.js) -->
@@ -179,8 +224,8 @@
 <script>
     
     
-            var map_b7379a4cab3a4f9874a0bb963d91ec0d = L.map(
-                "map_b7379a4cab3a4f9874a0bb963d91ec0d",
+            var map_010e4930ebb6fc0365f8f0b8b5326c7c = L.map(
+                "map_010e4930ebb6fc0365f8f0b8b5326c7c",
                 {
                     center: [39.98275, -75.19304],
                     crs: L.CRS.EPSG3857,
@@ -192,13 +237,13 @@
 
                 }
             );
-            L.control.scale().addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            L.control.scale().addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
 
             
 
         
     
-            var tile_layer_3104dee83c2d7bac155c804defbc2aa7 = L.tileLayer(
+            var tile_layer_322f5f9215fc65dd3dc4dbab2c5769ba = L.tileLayer(
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -215,16 +260,16 @@
             );
         
     
-            tile_layer_3104dee83c2d7bac155c804defbc2aa7.addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            tile_layer_322f5f9215fc65dd3dc4dbab2c5769ba.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var circle_marker_be84e9c01fee82af1c600746ee59411e = L.circleMarker(
+            var circle_marker_b2addbc3e41e22e171011c248766bb33 = L.circleMarker(
                 [39.98275, -75.19304],
                 {"bubblingMouseEvents": true, "color": "#2c7fb8", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2c7fb8", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4, "stroke": true, "weight": 3}
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            circle_marker_be84e9c01fee82af1c600746ee59411e.bindTooltip(
+            circle_marker_b2addbc3e41e22e171011c248766bb33.bindTooltip(
                 `<div>
                      Center
                  </div>`,
@@ -234,70 +279,70 @@
             );
         
     
-            var circle_44c5220e1f1f715ffdb579cb9a5028f4 = L.circle(
+            var circle_03e6b335c1e7c5f3bfda9802406fb0da = L.circle(
                 [39.98275, -75.19304],
                 {"bubblingMouseEvents": true, "color": "#666666", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#666666", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 5000.0, "stroke": true, "weight": 2}
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var marker_d374c716765ab1b28d14ba78191ae49b = L.marker(
+            var marker_f0a7baa0fb93fe227a862a0146cd3e17 = L.marker(
                 [40.027795045045046, -75.19304],
                 {
 }
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var div_icon_6c071fa4d19e90abc7eab579da7c053f = L.divIcon({
+            var div_icon_f628a4e5dfeb1d61cce4de97d711d848 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#666666;\u0027\u003e5 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_d374c716765ab1b28d14ba78191ae49b.setIcon(div_icon_6c071fa4d19e90abc7eab579da7c053f);
+                marker_f0a7baa0fb93fe227a862a0146cd3e17.setIcon(div_icon_f628a4e5dfeb1d61cce4de97d711d848);
             
     
-            var circle_0317194824d078d05d503d593bf997b1 = L.circle(
+            var circle_8a95d4f2c951dcd5cff244e85d49d3e9 = L.circle(
                 [39.98275, -75.19304],
                 {"bubblingMouseEvents": true, "color": "#555555", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#555555", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 10000.0, "stroke": true, "weight": 2}
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var marker_558acdeff065f5f983f207c6d0ab7cd8 = L.marker(
+            var marker_6ebea1e290b157d9672e7e6e5b713a05 = L.marker(
                 [40.0728400900901, -75.19304],
                 {
 }
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var div_icon_f37a8f00be302d23cfb05efa24635913 = L.divIcon({
+            var div_icon_fb6dbcab4b881324ddd06d8ec05f5ed4 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#555555;\u0027\u003e10 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_558acdeff065f5f983f207c6d0ab7cd8.setIcon(div_icon_f37a8f00be302d23cfb05efa24635913);
+                marker_6ebea1e290b157d9672e7e6e5b713a05.setIcon(div_icon_fb6dbcab4b881324ddd06d8ec05f5ed4);
             
     
-            var circle_804b0a155c34260a43bd027da64ec696 = L.circle(
+            var circle_93e9d5731ad3455ba973619c19151c1f = L.circle(
                 [39.98275, -75.19304],
                 {"bubblingMouseEvents": true, "color": "#08519c", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#08519c", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 15000.0, "stroke": true, "weight": 3}
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var marker_6ffc2d83de560d2829322c134c399f9b = L.marker(
+            var marker_b5536e34b344161783c356692a50142f = L.marker(
                 [40.11788513513514, -75.19304],
                 {
 }
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var div_icon_8b55542d8b4bfec658770410abc9aedb = L.divIcon({
+            var div_icon_e0bb5bf329d752b217c0af7972b70dc9 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#08519c; font-weight:bold;\u0027\u003e15 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_6ffc2d83de560d2829322c134c399f9b.setIcon(div_icon_8b55542d8b4bfec658770410abc9aedb);
+                marker_b5536e34b344161783c356692a50142f.setIcon(div_icon_e0bb5bf329d752b217c0af7972b70dc9);
             
     
             L.control.fullscreen(
@@ -307,16 +352,16 @@
   "titleCancel": "Exit Full Screen",
   "forceSeparateButton": false,
 }
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
         
     
-            var locate_control_30a3d59f23178d6da187066f7d3db81e = L.control.locate(
+            var locate_control_d2f03c1e64aff0af37d01b7d5af4951a = L.control.locate(
                 {"keepCurrentZoomLevel": false}
-            ).addTo(map_b7379a4cab3a4f9874a0bb963d91ec0d);
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
             
         
     
-            var mouse_position_a5d5c698ad0ea0dd0fd0184aedf57cff = new L.Control.MousePosition(
+            var mouse_position_30f5a24dc7545dab51c00cb8a590af46 = new L.Control.MousePosition(
                 {
   "position": "bottomright",
   "separator": " , ",
@@ -326,11 +371,395 @@
   "prefix": "Lat, Lon:",
 }
             );
-            mouse_position_a5d5c698ad0ea0dd0fd0184aedf57cff.options["latFormatter"] =
+            mouse_position_30f5a24dc7545dab51c00cb8a590af46.options["latFormatter"] =
                 undefined;
-            mouse_position_a5d5c698ad0ea0dd0fd0184aedf57cff.options["lngFormatter"] =
+            mouse_position_30f5a24dc7545dab51c00cb8a590af46.options["lngFormatter"] =
                 undefined;
-            map_b7379a4cab3a4f9874a0bb963d91ec0d.addControl(mouse_position_a5d5c698ad0ea0dd0fd0184aedf57cff);
+            map_010e4930ebb6fc0365f8f0b8b5326c7c.addControl(mouse_position_30f5a24dc7545dab51c00cb8a590af46);
+        
+    
+            var feature_group_cca121cf9f76cd689b93d9ed4bdc1def = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_bbc06ccb88ee64e7e7b9b09556c67268 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_83926b429460b0fcb7d9546a9baf9ce0 = L.marker(
+                [40.0682348, -75.2822826],
+                {
+}
+            ).addTo(marker_cluster_bbc06ccb88ee64e7e7b9b09556c67268);
+        
+    
+            var div_icon_37a2bfcfb99ae1982d9d9cd8975765c0 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#2262c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_75b2635a685c3a934e890ffe0c23c8d8 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_ce0602634891221cfba74159a14345d9 = $(`<div id="html_ce0602634891221cfba74159a14345d9" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Black-capped Chickadee</b></div><div><b>Location:</b> Riverbend Environmental Center</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313981031' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 11:49 (1)</li></ul></div></div>`)[0];
+                popup_75b2635a685c3a934e890ffe0c23c8d8.setContent(html_ce0602634891221cfba74159a14345d9);
+            
+        
+
+        marker_83926b429460b0fcb7d9546a9baf9ce0.bindPopup(popup_75b2635a685c3a934e890ffe0c23c8d8)
+        ;
+
+        
+    
+    
+            marker_83926b429460b0fcb7d9546a9baf9ce0.bindTooltip(
+                `<div>
+                     Black-capped Chickadee
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_83926b429460b0fcb7d9546a9baf9ce0.setIcon(div_icon_37a2bfcfb99ae1982d9d9cd8975765c0);
+            
+    
+            marker_cluster_bbc06ccb88ee64e7e7b9b09556c67268.addTo(feature_group_cca121cf9f76cd689b93d9ed4bdc1def);
+        
+    
+            feature_group_cca121cf9f76cd689b93d9ed4bdc1def.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+        
+    
+            var feature_group_115b4ac7bf713d6d4228b7613f05414f = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_2123c65bf146024d2ae6640f4706f261 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_1edd875c3d718a515be6c9b3899356c2 = L.marker(
+                [39.9658557, -75.1842713],
+                {
+}
+            ).addTo(marker_cluster_2123c65bf146024d2ae6640f4706f261);
+        
+    
+            var div_icon_14d2c9ab8a4234496ef9f556cd55901e = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#5522c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_d523d1e206b5a61e5b5add12efd49625 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_78b9b4712035442ff9cf84416736bdc0 = $(`<div id="html_78b9b4712035442ff9cf84416736bdc0" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Black-crowned Night Heron</b></div><div><b>Location:</b> Art Museum Waterworks</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313469649' target='_blank' rel='noopener'>Checklist</a> – 2026-03-26 16:38 (1)</li><li><a href='https://ebird.org/checklist/S313470373' target='_blank' rel='noopener'>Checklist</a> – 2026-03-26 16:38 (1)</li></ul></div></div>`)[0];
+                popup_d523d1e206b5a61e5b5add12efd49625.setContent(html_78b9b4712035442ff9cf84416736bdc0);
+            
+        
+
+        marker_1edd875c3d718a515be6c9b3899356c2.bindPopup(popup_d523d1e206b5a61e5b5add12efd49625)
+        ;
+
+        
+    
+    
+            marker_1edd875c3d718a515be6c9b3899356c2.bindTooltip(
+                `<div>
+                     Black-crowned Night Heron
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_1edd875c3d718a515be6c9b3899356c2.setIcon(div_icon_14d2c9ab8a4234496ef9f556cd55901e);
+            
+    
+            marker_cluster_2123c65bf146024d2ae6640f4706f261.addTo(feature_group_115b4ac7bf713d6d4228b7613f05414f);
+        
+    
+            feature_group_115b4ac7bf713d6d4228b7613f05414f.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+        
+    
+            var feature_group_1ebd35895d51ee7e5e39e406284f583b = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_dfda735ab1cdf44e1b9bc1bb99d42529 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_1fb271370675cbfd9d8789c7deac6e71 = L.marker(
+                [39.8876082, -75.1659143],
+                {
+}
+            ).addTo(marker_cluster_dfda735ab1cdf44e1b9bc1bb99d42529);
+        
+    
+            var div_icon_673dc621fda4c91ff818e1dd47c828ae = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#22c32a;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_4b4b8d8f03952d8feb6a1d8781e03e00 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_e0ea06146a3ced5cb2b4914a0357d592 = $(`<div id="html_e0ea06146a3ced5cb2b4914a0357d592" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Great Crested Flycatcher</b></div><div><b>Location:</b> Philadelphia Naval Yard (restricted access)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313632350' target='_blank' rel='noopener'>Checklist</a> – 2026-03-27 07:02 (1)</li></ul></div></div>`)[0];
+                popup_4b4b8d8f03952d8feb6a1d8781e03e00.setContent(html_e0ea06146a3ced5cb2b4914a0357d592);
+            
+        
+
+        marker_1fb271370675cbfd9d8789c7deac6e71.bindPopup(popup_4b4b8d8f03952d8feb6a1d8781e03e00)
+        ;
+
+        
+    
+    
+            marker_1fb271370675cbfd9d8789c7deac6e71.bindTooltip(
+                `<div>
+                     Great Crested Flycatcher
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_1fb271370675cbfd9d8789c7deac6e71.setIcon(div_icon_673dc621fda4c91ff818e1dd47c828ae);
+            
+    
+            marker_cluster_dfda735ab1cdf44e1b9bc1bb99d42529.addTo(feature_group_1ebd35895d51ee7e5e39e406284f583b);
+        
+    
+            feature_group_1ebd35895d51ee7e5e39e406284f583b.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+        
+    
+            var feature_group_776dc0ad47fe299fb0215dc201854daf = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_a92e5ff13fb39adabcc77a918e9d39ca = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_6578bd61ae846c8a0cb0186c189def56 = L.marker(
+                [40.0682348, -75.2822826],
+                {
+}
+            ).addTo(marker_cluster_a92e5ff13fb39adabcc77a918e9d39ca);
+        
+    
+            var div_icon_fa67ca580d64c682aa557453080dca56 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#4a22c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_15bcec07c7ac6e0936c47a03d41302dd = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_0f3190656e819f1d719d174641a33ea3 = $(`<div id="html_0f3190656e819f1d719d174641a33ea3" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Virginia's Warbler</b></div><div><b>Location:</b> Riverbend Environmental Center</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313981031' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 11:49 (1)</li><li><a href='https://ebird.org/checklist/S313960532' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 11:30 (1)</li><li><a href='https://ebird.org/checklist/S313961015' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 11:30 (1)</li><li><a href='https://ebird.org/checklist/S313970496' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 10:56 (1)</li><li><a href='https://ebird.org/checklist/S313956928' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 10:40 (1)</li><li><a href='https://ebird.org/checklist/S313978219' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 10:19 (1)</li><li><a href='https://ebird.org/checklist/S313970390' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:58 (1)</li><li><a href='https://ebird.org/checklist/S313925482' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:57 (1)</li><li><a href='https://ebird.org/checklist/S313955942' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:55 (1)</li><li><a href='https://ebird.org/checklist/S313955421' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:45 (1)</li><li><a href='https://ebird.org/checklist/S313956089' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:32 (1)</li><li><a href='https://ebird.org/checklist/S313959556' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:17 (1)</li><li><a href='https://ebird.org/checklist/S313941539' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:15 (1)</li><li><a href='https://ebird.org/checklist/S313923557' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:15 (1)</li><li><a href='https://ebird.org/checklist/S313913434' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:15 (1)</li><li><a href='https://ebird.org/checklist/S313911041' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:15 (1)</li><li><a href='https://ebird.org/checklist/S313908894' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 09:12 (1)</li><li><a href='https://ebird.org/checklist/S313948131' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:54 (1)</li><li><a href='https://ebird.org/checklist/S313924116' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:52 (1)</li><li><a href='https://ebird.org/checklist/S313935429' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:50 (1)</li><li><a href='https://ebird.org/checklist/S313905989' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:50 (1)</li><li><a href='https://ebird.org/checklist/S313926950' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:29 (1)</li><li><a href='https://ebird.org/checklist/S313909703' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:23 (1)</li><li><a href='https://ebird.org/checklist/S313895143' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:21 (1)</li><li><a href='https://ebird.org/checklist/S313973108' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:15 (1)</li><li><a href='https://ebird.org/checklist/S313950803' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:05 (1)</li><li><a href='https://ebird.org/checklist/S313941836' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:05 (1)</li><li><a href='https://ebird.org/checklist/S313890599' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 07:59 (1)</li><li><a href='https://ebird.org/checklist/S313909243' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 07:48 (1)</li><li><a href='https://ebird.org/checklist/S313883138' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 07:32 (1)</li><li><a href='https://ebird.org/checklist/S313924381' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 07:10 (1)</li><li><a href='https://ebird.org/checklist/S313851240' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 06:55 (1)</li></ul></div></div>`)[0];
+                popup_15bcec07c7ac6e0936c47a03d41302dd.setContent(html_0f3190656e819f1d719d174641a33ea3);
+            
+        
+
+        marker_6578bd61ae846c8a0cb0186c189def56.bindPopup(popup_15bcec07c7ac6e0936c47a03d41302dd)
+        ;
+
+        
+    
+    
+            marker_6578bd61ae846c8a0cb0186c189def56.bindTooltip(
+                `<div>
+                     Virginia's Warbler
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_6578bd61ae846c8a0cb0186c189def56.setIcon(div_icon_fa67ca580d64c682aa557453080dca56);
+            
+    
+            var marker_04bc454ef5c25106962655d4bdddf3c9 = L.marker(
+                [40.0670274, -75.284001],
+                {
+}
+            ).addTo(marker_cluster_a92e5ff13fb39adabcc77a918e9d39ca);
+        
+    
+            var div_icon_4576638caaee43367e690bb7ecaef658 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#4a22c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_69835026d815ca837d5017d4ed477289 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_79a111b2b4a99fa0e159affe0c519363 = $(`<div id="html_79a111b2b4a99fa0e159affe0c519363" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Virginia's Warbler</b></div><div><b>Location:</b> North Spring Mill Road, Lower Merion Township, Pennsylvania, US (40.067, -75.284)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313968508' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:30 (1)</li><li><a href='https://ebird.org/checklist/S313955631' target='_blank' rel='noopener'>Checklist</a> – 2026-03-28 08:30 (1)</li></ul></div></div>`)[0];
+                popup_69835026d815ca837d5017d4ed477289.setContent(html_79a111b2b4a99fa0e159affe0c519363);
+            
+        
+
+        marker_04bc454ef5c25106962655d4bdddf3c9.bindPopup(popup_69835026d815ca837d5017d4ed477289)
+        ;
+
+        
+    
+    
+            marker_04bc454ef5c25106962655d4bdddf3c9.bindTooltip(
+                `<div>
+                     Virginia's Warbler
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_04bc454ef5c25106962655d4bdddf3c9.setIcon(div_icon_4576638caaee43367e690bb7ecaef658);
+            
+    
+            marker_cluster_a92e5ff13fb39adabcc77a918e9d39ca.addTo(feature_group_776dc0ad47fe299fb0215dc201854daf);
+        
+    
+            feature_group_776dc0ad47fe299fb0215dc201854daf.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+        
+    
+            var feature_group_6009ba686cb5929fb4570f4942c2b010 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_f9bcbdaab95ecbfa24a856f0981862e8 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_825487b026d52af7dc280c8004d27e74 = L.marker(
+                [40.1003152, -75.2402115],
+                {
+}
+            ).addTo(marker_cluster_f9bcbdaab95ecbfa24a856f0981862e8);
+        
+    
+            var div_icon_20bb40d0ff97b5f482c02c673679ed15 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#22a2c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_60ee16a6908133b073bf2097cfeb0981 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_ed45c1b4f6de4537c7a652ad7f596e1e = $(`<div id="html_ed45c1b4f6de4537c7a652ad7f596e1e" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>White-crowned Sparrow</b></div><div><b>Location:</b> Dixon Meadow Preserve</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S313971371' target='_blank' rel='noopener'>Checklist</a> – 2026-03-27 12:02 (3)</li></ul></div></div>`)[0];
+                popup_60ee16a6908133b073bf2097cfeb0981.setContent(html_ed45c1b4f6de4537c7a652ad7f596e1e);
+            
+        
+
+        marker_825487b026d52af7dc280c8004d27e74.bindPopup(popup_60ee16a6908133b073bf2097cfeb0981)
+        ;
+
+        
+    
+    
+            marker_825487b026d52af7dc280c8004d27e74.bindTooltip(
+                `<div>
+                     White-crowned Sparrow
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_825487b026d52af7dc280c8004d27e74.setIcon(div_icon_20bb40d0ff97b5f482c02c673679ed15);
+            
+    
+            marker_cluster_f9bcbdaab95ecbfa24a856f0981862e8.addTo(feature_group_6009ba686cb5929fb4570f4942c2b010);
+        
+    
+            feature_group_6009ba686cb5929fb4570f4942c2b010.addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+        
+    
+            var layer_control_fdd1d9978831d38e28b4c00b92cba12a_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_322f5f9215fc65dd3dc4dbab2c5769ba,
+                },
+                overlays :  {
+                    "Black-capped Chickadee" : feature_group_cca121cf9f76cd689b93d9ed4bdc1def,
+                    "Black-crowned Night Heron" : feature_group_115b4ac7bf713d6d4228b7613f05414f,
+                    "Great Crested Flycatcher" : feature_group_1ebd35895d51ee7e5e39e406284f583b,
+                    "Virginia\u0027s Warbler" : feature_group_776dc0ad47fe299fb0215dc201854daf,
+                    "White-crowned Sparrow" : feature_group_6009ba686cb5929fb4570f4942c2b010,
+                },
+            };
+            let layer_control_fdd1d9978831d38e28b4c00b92cba12a = L.control.layers(
+                layer_control_fdd1d9978831d38e28b4c00b92cba12a_layers.base_layers,
+                layer_control_fdd1d9978831d38e28b4c00b92cba12a_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_010e4930ebb6fc0365f8f0b8b5326c7c);
+
         
 </script>
 </html>
