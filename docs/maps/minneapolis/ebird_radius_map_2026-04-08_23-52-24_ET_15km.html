@@ -19,7 +19,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_5293fb988a742bbb1079f58d82f31f0b {
+                #map_1b10ac65952238d7563f291b4f2ecf6b {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -58,6 +58,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.66.2/L.Control.Locate.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
 </head>
 <body>
     
@@ -105,7 +108,7 @@
         <div>
           <h3 class="gb-info-title">Minneapolis, MN & Vicinity</h3>
           <div class="gb-info-meta">eBird Notable · 15 km radius · last 2 day(s)</div>
-          <div class="gb-info-row"><span>Built: Mar 24, 2026 11:42 PM EDT</span> <a href="https://goodbirds-org.github.io/goodbirds-site/minneapolis/archive.html" target="_blank" rel="noopener">Archive</a></div>
+          <div class="gb-info-row"><span>Built: Apr 08, 2026 11:52 PM EDT</span> <a href="https://goodbirds-org.github.io/goodbirds-site/minneapolis/archive.html" target="_blank" rel="noopener">Archive</a></div>
         </div>
       </div>
     </div>
@@ -122,16 +125,9 @@
     </script>
     
     
-    <div style="
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
-      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    ">No current notable birds for the selected window.</div>
-    
-    
     <script>
     (function(){
-      var speciesSet = new Set([]);
+      var speciesSet = new Set(['Carolina Wren', 'Carolina Wren (Northern)']);
       function clearSpecies(){
         var root = document.querySelector('.leaflet-control-layers-overlays');
         if (!root) return;
@@ -156,14 +152,63 @@
       });
       function addWhenReady(){
         if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
-        (new ClearCtl({position:'topright'})).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+        (new ClearCtl({position:'topright'})).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
       }
       addWhenReady();
     })();
     </script>
     
     
-            <div class="folium-map" id="map_5293fb988a742bbb1079f58d82f31f0b" ></div>
+    <script>
+    (function(){
+      var colorMap = {'Carolina Wren': '#c32298', 'Carolina Wren (Northern)': '#22c32d'};
+
+      function decorate(){
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){
+            if(root.style.display==='none'){ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }
+            else { root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }
+          });
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        });
+        return true;
+      }
+
+      function whenReady(){ if(!decorate()) setTimeout(whenReady,200); }
+      whenReady();
+    })();
+    </script>
+    
+    
+            <div class="folium-map" id="map_1b10ac65952238d7563f291b4f2ecf6b" ></div>
         
 
 <!-- Google tag (gtag.js) -->
@@ -179,8 +224,8 @@
 <script>
     
     
-            var map_5293fb988a742bbb1079f58d82f31f0b = L.map(
-                "map_5293fb988a742bbb1079f58d82f31f0b",
+            var map_1b10ac65952238d7563f291b4f2ecf6b = L.map(
+                "map_1b10ac65952238d7563f291b4f2ecf6b",
                 {
                     center: [44.9723, -93.3172],
                     crs: L.CRS.EPSG3857,
@@ -192,13 +237,13 @@
 
                 }
             );
-            L.control.scale().addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            L.control.scale().addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
 
             
 
         
     
-            var tile_layer_ad604b0f7b87df80241db1c2d436824b = L.tileLayer(
+            var tile_layer_0a51d3954f62017ccc672149e1f2a11a = L.tileLayer(
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -215,16 +260,16 @@
             );
         
     
-            tile_layer_ad604b0f7b87df80241db1c2d436824b.addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            tile_layer_0a51d3954f62017ccc672149e1f2a11a.addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var circle_marker_f198aa97634cf16bed972c6fd8715499 = L.circleMarker(
+            var circle_marker_de50eb33eec8fa39cd3b762a81ec7a95 = L.circleMarker(
                 [44.9723, -93.3172],
                 {"bubblingMouseEvents": true, "color": "#2c7fb8", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2c7fb8", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4, "stroke": true, "weight": 3}
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            circle_marker_f198aa97634cf16bed972c6fd8715499.bindTooltip(
+            circle_marker_de50eb33eec8fa39cd3b762a81ec7a95.bindTooltip(
                 `<div>
                      Center
                  </div>`,
@@ -234,70 +279,70 @@
             );
         
     
-            var circle_beae792dc2f2e98fce05b76f143392f8 = L.circle(
+            var circle_35b1e2e3af325bb782d759bad07cb3e2 = L.circle(
                 [44.9723, -93.3172],
                 {"bubblingMouseEvents": true, "color": "#666666", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#666666", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 5000.0, "stroke": true, "weight": 2}
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var marker_d829314b2dcca656b6a3e598b2c301e6 = L.marker(
+            var marker_32bea6574b5b47565f2061659ee67961 = L.marker(
                 [45.01734504504504, -93.3172],
                 {
 }
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var div_icon_3d5a22dabc9735af1d17c7fdb33d6b72 = L.divIcon({
+            var div_icon_1919cedc6ae212f8f467ef552aff7d6d = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#666666;\u0027\u003e5 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_d829314b2dcca656b6a3e598b2c301e6.setIcon(div_icon_3d5a22dabc9735af1d17c7fdb33d6b72);
+                marker_32bea6574b5b47565f2061659ee67961.setIcon(div_icon_1919cedc6ae212f8f467ef552aff7d6d);
             
     
-            var circle_1245e80ebc46878ec4e7bef3be8cee6e = L.circle(
+            var circle_bdff002d8ba7806436fe9a061377b5ae = L.circle(
                 [44.9723, -93.3172],
                 {"bubblingMouseEvents": true, "color": "#555555", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#555555", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 10000.0, "stroke": true, "weight": 2}
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var marker_3765745faff74f17e24ee00eebb51885 = L.marker(
+            var marker_32f49e949296ce9b05777ae0abc2b99b = L.marker(
                 [45.06239009009009, -93.3172],
                 {
 }
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var div_icon_6db521728b63355aff00a63022781faf = L.divIcon({
+            var div_icon_01a56cf287be5ff1dfc28ecbd247ab80 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#555555;\u0027\u003e10 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_3765745faff74f17e24ee00eebb51885.setIcon(div_icon_6db521728b63355aff00a63022781faf);
+                marker_32f49e949296ce9b05777ae0abc2b99b.setIcon(div_icon_01a56cf287be5ff1dfc28ecbd247ab80);
             
     
-            var circle_a95115f515e8ec30878982a61c604df3 = L.circle(
+            var circle_b74c2177ff365edd350d2fa5b07e6709 = L.circle(
                 [44.9723, -93.3172],
                 {"bubblingMouseEvents": true, "color": "#08519c", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#08519c", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 15000.0, "stroke": true, "weight": 3}
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var marker_68cbb0e7c0f63721963f54b2fa5d85a9 = L.marker(
+            var marker_45022dd15d6e4e15e113618782cab3ea = L.marker(
                 [45.107435135135134, -93.3172],
                 {
 }
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var div_icon_df5cac7672f4f8776c0a2b52fd643fb9 = L.divIcon({
+            var div_icon_586b604fda1510bb6f15b9928eba3a17 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#08519c; font-weight:bold;\u0027\u003e15 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_68cbb0e7c0f63721963f54b2fa5d85a9.setIcon(div_icon_df5cac7672f4f8776c0a2b52fd643fb9);
+                marker_45022dd15d6e4e15e113618782cab3ea.setIcon(div_icon_586b604fda1510bb6f15b9928eba3a17);
             
     
             L.control.fullscreen(
@@ -307,16 +352,16 @@
   "titleCancel": "Exit Full Screen",
   "forceSeparateButton": false,
 }
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
         
     
-            var locate_control_6774ce751abe021b3dbd632f1ba8c770 = L.control.locate(
+            var locate_control_ea14bd72abc39f9c0a4ae1b291ecbac9 = L.control.locate(
                 {"keepCurrentZoomLevel": false}
-            ).addTo(map_5293fb988a742bbb1079f58d82f31f0b);
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
             
         
     
-            var mouse_position_81eef1cb67f36ebf1ae36329e1627c79 = new L.Control.MousePosition(
+            var mouse_position_3f3fd91a53b41d470d186749ace435c2 = new L.Control.MousePosition(
                 {
   "position": "bottomright",
   "separator": " , ",
@@ -326,11 +371,383 @@
   "prefix": "Lat, Lon:",
 }
             );
-            mouse_position_81eef1cb67f36ebf1ae36329e1627c79.options["latFormatter"] =
+            mouse_position_3f3fd91a53b41d470d186749ace435c2.options["latFormatter"] =
                 undefined;
-            mouse_position_81eef1cb67f36ebf1ae36329e1627c79.options["lngFormatter"] =
+            mouse_position_3f3fd91a53b41d470d186749ace435c2.options["lngFormatter"] =
                 undefined;
-            map_5293fb988a742bbb1079f58d82f31f0b.addControl(mouse_position_81eef1cb67f36ebf1ae36329e1627c79);
+            map_1b10ac65952238d7563f291b4f2ecf6b.addControl(mouse_position_3f3fd91a53b41d470d186749ace435c2);
+        
+    
+            var feature_group_203049cf1fe1615cbd34e2eb19bf06cc = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_9764ab9b16de38096c2260b5619ec088 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_7762ebd798ec2cfaa4c6c1ccf39182e8 = L.marker(
+                [44.8904804, -93.1821084],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_74d045928dd9618b42fefab261259c66 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_b4bc6fb3198f7b79721c96b9240bb9cf = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_09984efae72e64a2acc754c318df1314 = $(`<div id="html_09984efae72e64a2acc754c318df1314" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> Fort Snelling SP--Visitor Center</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318984964' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 19:09 (1)</li><li><a href='https://ebird.org/checklist/S318984965' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 19:09 (1)</li><li><a href='https://ebird.org/checklist/S318968495' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 16:20 (1)</li><li><a href='https://ebird.org/checklist/S318964809' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 14:59 (1)</li><li><a href='https://ebird.org/checklist/S318808655' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 11:05 (1)</li><li><a href='https://ebird.org/checklist/S318774357' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 09:36 (1)</li><li><a href='https://ebird.org/checklist/S318513965' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 16:35 (1)</li><li><a href='https://ebird.org/checklist/S318389221' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 12:07 (1)</li><li><a href='https://ebird.org/checklist/S318434637' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 12:03 (1)</li><li><a href='https://ebird.org/checklist/S318392680' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 11:40 (1)</li><li><a href='https://ebird.org/checklist/S318345160' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 10:25 (1)</li></ul></div></div>`)[0];
+                popup_b4bc6fb3198f7b79721c96b9240bb9cf.setContent(html_09984efae72e64a2acc754c318df1314);
+            
+        
+
+        marker_7762ebd798ec2cfaa4c6c1ccf39182e8.bindPopup(popup_b4bc6fb3198f7b79721c96b9240bb9cf)
+        ;
+
+        
+    
+    
+            marker_7762ebd798ec2cfaa4c6c1ccf39182e8.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_7762ebd798ec2cfaa4c6c1ccf39182e8.setIcon(div_icon_74d045928dd9618b42fefab261259c66);
+            
+    
+            var marker_3aa2cc5c8b98f27675228046220607e8 = L.marker(
+                [44.8910237, -93.1811814],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_6d83448ac808511af4a6f7f87469f593 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_c5faad3141a5d800c6f03eb105309406 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_aca622499024447538b9686f99d551cd = $(`<div id="html_aca622499024447538b9686f99d551cd" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> 101 Snelling Lake Road, Saint Paul, Minnesota, US (44.891, -93.181)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318952163' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 17:04 (1)</li></ul></div></div>`)[0];
+                popup_c5faad3141a5d800c6f03eb105309406.setContent(html_aca622499024447538b9686f99d551cd);
+            
+        
+
+        marker_3aa2cc5c8b98f27675228046220607e8.bindPopup(popup_c5faad3141a5d800c6f03eb105309406)
+        ;
+
+        
+    
+    
+            marker_3aa2cc5c8b98f27675228046220607e8.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_3aa2cc5c8b98f27675228046220607e8.setIcon(div_icon_6d83448ac808511af4a6f7f87469f593);
+            
+    
+            var marker_e209bac4604578517c77da52a2ba9abe = L.marker(
+                [44.874446, -93.1911072],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_35b9cdc9ce3fc551ee951c26d28a4717 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_1b802ac0c12abf4d9d158ec85c8455b5 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_957311135a94175444fd9e452f263a74 = $(`<div id="html_957311135a94175444fd9e452f263a74" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> Fort Snelling SP</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318953336' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 15:09 (1)</li></ul></div></div>`)[0];
+                popup_1b802ac0c12abf4d9d158ec85c8455b5.setContent(html_957311135a94175444fd9e452f263a74);
+            
+        
+
+        marker_e209bac4604578517c77da52a2ba9abe.bindPopup(popup_1b802ac0c12abf4d9d158ec85c8455b5)
+        ;
+
+        
+    
+    
+            marker_e209bac4604578517c77da52a2ba9abe.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_e209bac4604578517c77da52a2ba9abe.setIcon(div_icon_35b9cdc9ce3fc551ee951c26d28a4717);
+            
+    
+            var marker_387422974bc4eb7697e42f8cadf9cb3a = L.marker(
+                [44.8805053, -93.1835461],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_764a0c148a888e34a175bf553a75b293 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_3d98d472c88ae25fda135d57e18f4c1b = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_63d224211597f2f46d513448844bf13f = $(`<div id="html_63d224211597f2f46d513448844bf13f" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> Fort Snelling SP--Snelling Lake</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318793705' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 11:25 (1)</li></ul></div></div>`)[0];
+                popup_3d98d472c88ae25fda135d57e18f4c1b.setContent(html_63d224211597f2f46d513448844bf13f);
+            
+        
+
+        marker_387422974bc4eb7697e42f8cadf9cb3a.bindPopup(popup_3d98d472c88ae25fda135d57e18f4c1b)
+        ;
+
+        
+    
+    
+            marker_387422974bc4eb7697e42f8cadf9cb3a.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_387422974bc4eb7697e42f8cadf9cb3a.setIcon(div_icon_764a0c148a888e34a175bf553a75b293);
+            
+    
+            var marker_ddaab252a0e57b79b549e90787d641fd = L.marker(
+                [44.8927674, -93.1806627],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_35423ea26ca98501e8622612a25af7f5 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_123793f45638b84fe45a70dc0a585417 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_9224b0b20446062e01bfd6526feeb5aa = $(`<div id="html_9224b0b20446062e01bfd6526feeb5aa" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> Historic Fort Snelling</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318505567' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 17:00 (1)</li></ul></div></div>`)[0];
+                popup_123793f45638b84fe45a70dc0a585417.setContent(html_9224b0b20446062e01bfd6526feeb5aa);
+            
+        
+
+        marker_ddaab252a0e57b79b549e90787d641fd.bindPopup(popup_123793f45638b84fe45a70dc0a585417)
+        ;
+
+        
+    
+    
+            marker_ddaab252a0e57b79b549e90787d641fd.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_ddaab252a0e57b79b549e90787d641fd.setIcon(div_icon_35423ea26ca98501e8622612a25af7f5);
+            
+    
+            var marker_e6b1bb356ad79957df54a5debaa1508d = L.marker(
+                [44.8921294, -93.1787298],
+                {
+}
+            ).addTo(marker_cluster_9764ab9b16de38096c2260b5619ec088);
+        
+    
+            var div_icon_d94d808fe7df11f68b7645f970f6bd17 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32298;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_772197a40db26fa32b7744e8821c9bc2 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_b72539b1f32e6974f9443bd220be208b = $(`<div id="html_b72539b1f32e6974f9443bd220be208b" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren</b></div><div><b>Location:</b> CARW Circuit</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318552182' target='_blank' rel='noopener'>Checklist</a> – 2026-04-07 14:41 (1)</li></ul></div></div>`)[0];
+                popup_772197a40db26fa32b7744e8821c9bc2.setContent(html_b72539b1f32e6974f9443bd220be208b);
+            
+        
+
+        marker_e6b1bb356ad79957df54a5debaa1508d.bindPopup(popup_772197a40db26fa32b7744e8821c9bc2)
+        ;
+
+        
+    
+    
+            marker_e6b1bb356ad79957df54a5debaa1508d.bindTooltip(
+                `<div>
+                     Carolina Wren
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_e6b1bb356ad79957df54a5debaa1508d.setIcon(div_icon_d94d808fe7df11f68b7645f970f6bd17);
+            
+    
+            marker_cluster_9764ab9b16de38096c2260b5619ec088.addTo(feature_group_203049cf1fe1615cbd34e2eb19bf06cc);
+        
+    
+            feature_group_203049cf1fe1615cbd34e2eb19bf06cc.addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
+        
+    
+            var feature_group_8ef1a2acb547c5ff4967152764615a01 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_f265b1a7559d5c7de0ed849283317d90 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_2e7be89630696d2053a9673a3eb09cff = L.marker(
+                [44.8904804, -93.1821084],
+                {
+}
+            ).addTo(marker_cluster_f265b1a7559d5c7de0ed849283317d90);
+        
+    
+            var div_icon_7d51d649eddfa360309e5a80e2430e68 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#22c32d;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_40770a74857909c2f143f8509273fb33 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6899f0b79d3646bdee18724410acf79f = $(`<div id="html_6899f0b79d3646bdee18724410acf79f" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Carolina Wren (Northern)</b></div><div><b>Location:</b> Fort Snelling SP--Visitor Center</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S318905507' target='_blank' rel='noopener'>Checklist</a> – 2026-04-08 14:21 (1)</li></ul></div></div>`)[0];
+                popup_40770a74857909c2f143f8509273fb33.setContent(html_6899f0b79d3646bdee18724410acf79f);
+            
+        
+
+        marker_2e7be89630696d2053a9673a3eb09cff.bindPopup(popup_40770a74857909c2f143f8509273fb33)
+        ;
+
+        
+    
+    
+            marker_2e7be89630696d2053a9673a3eb09cff.bindTooltip(
+                `<div>
+                     Carolina Wren (Northern)
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_2e7be89630696d2053a9673a3eb09cff.setIcon(div_icon_7d51d649eddfa360309e5a80e2430e68);
+            
+    
+            marker_cluster_f265b1a7559d5c7de0ed849283317d90.addTo(feature_group_8ef1a2acb547c5ff4967152764615a01);
+        
+    
+            feature_group_8ef1a2acb547c5ff4967152764615a01.addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
+        
+    
+            var layer_control_b0e386da109cea3565e4a0bef73800e1_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_0a51d3954f62017ccc672149e1f2a11a,
+                },
+                overlays :  {
+                    "Carolina Wren" : feature_group_203049cf1fe1615cbd34e2eb19bf06cc,
+                    "Carolina Wren (Northern)" : feature_group_8ef1a2acb547c5ff4967152764615a01,
+                },
+            };
+            let layer_control_b0e386da109cea3565e4a0bef73800e1 = L.control.layers(
+                layer_control_b0e386da109cea3565e4a0bef73800e1_layers.base_layers,
+                layer_control_b0e386da109cea3565e4a0bef73800e1_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_1b10ac65952238d7563f291b4f2ecf6b);
+
         
 </script>
 </html>
