@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-capture_and_post_bsky.py v2.1 (rotation)
+capture_and_post_bsky.py v3.0 (stable map URLs)
 - Daily rotation based on America/New_York date
-- Each rotation item defines:
-    name, map_url (canonical latest.html), latest_txt_url (to resolve actual page),
-    post_text (caption + hashtags), alt_text
-- Screenshots the resolved dated page, posts text with canonical latest.html
+- Each rotation item defines: name, map_url, post_text, alt_text
+- Screenshots the stable map page and posts that same URL
 - Clickable link + hashtag facets via TextBuilder
 - Optional DRY_RUN=1 to test without posting
 - Optional ROTATION_OFFSET to shift which item is "today"
@@ -16,8 +14,7 @@ import pathlib
 import tempfile
 import re
 from datetime import datetime, date
-from urllib.parse import urlparse, urljoin
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 from atproto import Client, client_utils
@@ -34,104 +31,73 @@ def log(msg: str):
 ROTATION = [
     {
         "name": "Manhattan",
-        "map_url": "https://goodbirds.org/maps/manhattan/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/manhattan/latest.txt",
+        "map_url": "https://goodbirds.org/maps/manhattan/index.html",
         "post_text": "Latest notable bird sightings in Manhattan 🗽🐦 #ebird #nyc #birds",
         "alt_text": "Full-page screenshot of the most recent Manhattan GoodBirds map",
     },
     {
         "name": "Cambridge",
-        "map_url": "https://goodbirds.org/maps/cambridge/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/cambridge/latest.txt",
+        "map_url": "https://goodbirds.org/maps/cambridge/index.html",
         "post_text": "Latest notable bird sightings in Cambridge 🐦📚 #ebird #cambridge #birds",
         "alt_text": "Full-page screenshot of the most recent Cambridge GoodBirds map",
     },
     {
         "name": "Chicago",
-        "map_url": "https://goodbirds.org/maps/chicago/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/chicago/latest.txt",
+        "map_url": "https://goodbirds.org/maps/chicago/index.html",
         "post_text": "Latest notable bird sightings in Chicago 🌬️🐦 #ebird #chicago #birds",
         "alt_text": "Full-page screenshot of the most recent Chicago GoodBirds map",
     },
     {
         "name": "Portland, OR",
-        "map_url": "https://goodbirds.org/maps/portland-or/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/portland-or/latest.txt",
+        "map_url": "https://goodbirds.org/maps/portland-or/index.html",
         "post_text": "Latest notable bird sightings in Portland, OR 🌲🐦 #rosecity #pdx #ebird #birds",
         "alt_text": "Full-page screenshot of the most recent Portland, OR GoodBirds map",
     },
     {
         "name": "San Diego, CA",
-        "map_url": "https://goodbirds.org/maps/san-diego/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/san-diego/latest.txt",
+        "map_url": "https://goodbirds.org/maps/san-diego/index.html",
         "post_text": "Latest notable bird sightings in San Diego, CA 🌊🐦⚡ #ebird #sandiego #birds",
         "alt_text": "Full-page screenshot of the most recent San Diego GoodBirds map",
     },
     {
         "name": "Philadelphia",
-        "map_url": "https://goodbirds.org/maps/philadelphia/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/philadelphia/latest.txt",
+        "map_url": "https://goodbirds.org/maps/philadelphia/index.html",
         "post_text": "Latest notable bird sightings in Philadelphia 🔔🐦 #ebird #philadelphia #birds",
         "alt_text": "Full-page screenshot of the most recent Philadelphia GoodBirds map",
     },
     {
         "name": "Colorado Springs",
-        "map_url": "https://goodbirds.org/maps/colorado-springs/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/colorado-springs/latest.txt",
+        "map_url": "https://goodbirds.org/maps/colorado-springs/index.html",
         "post_text": "Latest notable bird sightings in Colorado Springs 🏔️🐦 #ebird #coloradosprings #birds",
         "alt_text": "Full-page screenshot of the most recent Colorado Springs GoodBirds map",
     },
     {
+        "name": "Fort Worth",
+        "map_url": "https://goodbirds.org/maps/fort-worth/index.html",
+        "post_text": "Latest notable bird sightings in Fort Worth, TX 🤠🐦 #ebird #fortworth #birds",
+        "alt_text": "Full-page screenshot of the current Fort Worth, TX GoodBirds map",
+    },
+    {
         "name": "Cape May",
-        "map_url": "https://goodbirds.org/maps/cape-may/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/cape-may/latest.txt",
+        "map_url": "https://goodbirds.org/maps/cape-may/index.html",
         "post_text": "Latest notable bird sightings in Cape May, NJ 🏖️🐦 #ebird #capemay #birds",
         "alt_text": "Full-page screenshot of the most recent Cape May, NJ GoodBirds map",
     },
     {
         "name": "San Francisco",
-        "map_url": "https://goodbirds.org/maps/san-francisco/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/san-francisco/latest.txt",
+        "map_url": "https://goodbirds.org/maps/san-francisco/index.html",
         "post_text": "Latest notable bird sightings in San Francisco, CA 🌁🐦 #ebird #sanfrancisco #birds",
         "alt_text": "Full-page screenshot of the most recent San Francisco GoodBirds map",
     },
     {
         "name": "Tucson",
-        "map_url": "https://goodbirds.org/maps/tucson/latest.html",
-        "latest_txt_url": "https://goodbirds.org/maps/tucson/latest.txt",
+        "map_url": "https://goodbirds.org/maps/tucson/index.html",
         "post_text": "Latest notable bird sightings in Tucson, AZ 🌵🐦 #ebird #tucson #birds",
         "alt_text": "Full-page screenshot of the most recent Tucson GoodBirds map",
     },
 ]
 
 # ---------------------------------
-
-def fetch_text(url: str, timeout: int = 15) -> str:
-    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req, timeout=timeout) as resp:
-        data = resp.read()
-    return data.decode("utf-8", errors="replace")
-
-def resolve_latest_map_url(map_url: str, latest_txt_url: str | None) -> str:
-    if not latest_txt_url:
-        return map_url
-    try:
-        txt = fetch_text(latest_txt_url).strip()
-        chosen = None
-        for line in txt.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            chosen = line
-            break
-        if not chosen:
-            log(f"[warn] {latest_txt_url} had no usable lines. Falling back to MAP_URL.")
-            return map_url
-        base_dir = latest_txt_url.rsplit("/", 1)[0] + "/"
-        return urljoin(base_dir, chosen)
-    except Exception as e:
-        log(f"[warn] Could not read {latest_txt_url}: {e}. Falling back to MAP_URL.")
-        return map_url
 
 def screenshot_page(target: str, out_path: str, viewport_width=1400, viewport_height=900, wait_ms=5000):
     with sync_playwright() as p:
@@ -185,7 +151,7 @@ def getenv_int(name: str, default: int) -> int:
         return default
 
 def main():
-    log("[info] capture_and_post_bsky.py v2.1 starting")
+    log("[info] capture_and_post_bsky.py v3.0 starting")
 
     # Current date in New York for rotation
     if ZoneInfo:
@@ -226,18 +192,15 @@ def main():
 
     name = item["name"]
     map_url = item["map_url"]
-    latest_txt_url = item.get("latest_txt_url")
     post_text = item["post_text"]
     alt_text = item["alt_text"]
 
     # Optional direct overrides for special posts (e.g., cities_map.html)
     force_map_url = os.environ.get("FORCE_MAP_URL", "").strip()
-    force_latest_txt_url = os.environ.get("FORCE_LATEST_TXT_URL", "").strip()
     force_post_text = os.environ.get("FORCE_POST_TEXT", "").strip()
     force_alt_text = os.environ.get("FORCE_ALT_TEXT", "").strip()
     if force_map_url:
         map_url = force_map_url
-        latest_txt_url = force_latest_txt_url or None
     if force_post_text:
         post_text = force_post_text
     if force_alt_text:
@@ -251,8 +214,8 @@ def main():
         post_text = f"{post_text} {extra_tag}"
 
 
-    # Resolve the actual dated page to screenshot; keep canonical latest.html for the post text
-    effective_url = resolve_latest_map_url(map_url, latest_txt_url)
+    # Screenshot and post the same stable map URL
+    effective_url = map_url
     full_text, facets = build_text_and_facets(post_text, map_url)
 
     # Rendering and wait settings

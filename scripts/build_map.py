@@ -54,7 +54,6 @@ BACK_DAYS = int(os.getenv("BACK_DAYS", "2"))
 MAX_RESULTS = int(os.getenv("MAX_RESULTS", "200"))
 ZOOM_START = int(os.getenv("ZOOM_START", "11"))
 SPECIES_LAYER_THRESHOLD = int(os.getenv("SPECIES_LAYER_THRESHOLD", "200"))
-ARCHIVE_URL = os.getenv("ARCHIVE_URL", "/cambridge/archive.html")
 MAP_MAIN_TITLE = os.getenv("MAP_MAIN_TITLE", "Cambridge, MA & Vicinity")
 
 def _parse_ring_kms(text: str):
@@ -155,19 +154,12 @@ def add_notice(m, text: str):
 
 def compute_dt_et():
     tz = ZoneInfo("America/New_York")
-    run_date = os.getenv("RUN_DATE_ET", "")
-    run_slot = os.getenv("RUN_SLOT", "")
     try:
-        if run_date and run_slot in ("12", "21"):
-            y, mo, d = map(int, run_date.split("-")); h = int(run_slot)
-            dt = datetime(y, mo, d, h, 0, 0, tzinfo=tz)
-        else:
-            dt = datetime.now(tz)
+        dt = datetime.now(tz)
     except Exception:
         dt = datetime.now(tz)
     display_str = dt.strftime("%b %d, %Y %I:%M %p %Z")
-    file_str = dt.strftime("%Y-%m-%d_%H-%M-%S_ET")
-    return dt, display_str, file_str
+    return dt, display_str
 
 def _file_to_data_url(path: str) -> str:
     try:
@@ -235,7 +227,7 @@ def build_info_ui(radius_km: int, back_days: int, ts_display_et: str, logo_src: 
         <div>
           <h3 class="gb-info-title">{MAP_MAIN_TITLE}</h3>
           <div class="gb-info-meta">eBird Notable · {radius_km} km radius · last {back_days} day(s)</div>
-          <div class="gb-info-row"><span>Built: {ts_display_et}</span> <a href="{ARCHIVE_URL}" target="_blank" rel="noopener">Archive</a></div>
+          <div class="gb-info-row"><span>Built: {ts_display_et}</span></div>
         </div>
       </div>
     </div>
@@ -345,21 +337,6 @@ def add_color_swatches_to_layer_control(m: folium.Map, species_to_color: Ordered
     """
     m.get_root().html.add_child(folium.Element(js))
 
-def prune_archive(dirpath: str, keep: int = 30) -> int:
-    try:
-        files = [f for f in os.listdir(dirpath)
-                 if f.startswith("ebird_radius_map_") and f.endswith(".html")]
-        files.sort(reverse=True)
-        to_remove = files[keep:]
-        for f in to_remove:
-            try:
-                os.remove(os.path.join(dirpath, f))
-            except Exception:
-                pass
-        return len(to_remove)
-    except Exception:
-        return 0
-
 def save_and_publish(m, outfile: str):
     # Let folium write the base HTML file
     m.save(outfile)
@@ -401,20 +378,11 @@ def save_and_publish(m, outfile: str):
         print(f"Warning - could not inject GA/title into {outfile}: {e}")
 
     print(f"Map saved as '{outfile}'")
-    latest_path = os.path.join(output_dir, "latest.html")
-    try:
-        import shutil
-        shutil.copyfile(outfile, latest_path)
-        print(f"Updated '{latest_path}'")
-    except Exception:
-        pass
-    removed = prune_archive(output_dir, KEEP_COUNT)
-    print(f"Archive pruning - kept {KEEP_COUNT}, removed {removed}")
 
 def make_map(lat=CENTER_LAT, lon=CENTER_LON, radius_km=DEFAULT_RADIUS_KM,
              back_days=BACK_DAYS, zoom_start=ZOOM_START):
-    _, ts_display_et, ts_file_et = compute_dt_et()
-    outfile = os.path.join(output_dir, f"ebird_radius_map_{ts_file_et}_{radius_km}km.html")
+    _, ts_display_et = compute_dt_et()
+    outfile = os.path.join(output_dir, "index.html")
 
     data = get_data(lat, lon, radius_km, back_days)
 
