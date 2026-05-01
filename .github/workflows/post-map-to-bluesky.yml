@@ -6,18 +6,12 @@ on:
     - cron: "0 11 * * *"   # 06:00 ET during Standard Time
   workflow_dispatch:
     inputs:
-      force_run:
-        description: "Bypass time guard and run now"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
       city:
         description: "Force a specific city (optional)"
         required: false
         default: ""
         type: choice
-        options: ["", "Manhattan", "Cambridge", "Chicago", "Portland, OR", "San Diego, CA", "Philadelphia", "Colorado Springs", "Cape May", "San Francisco", "Tucson"]
+        options: ["", "Manhattan", "Cambridge", "Chicago", "Portland, OR", "San Diego, CA", "Philadelphia", "Colorado Springs", "Fort Worth", "Cape May", "San Francisco", "Tucson"]
       extra_hashtag:
         description: "Optional extra hashtags. Space-separated. Example: '#bluefootedbooby #migration'"
         required: false
@@ -35,42 +29,20 @@ jobs:
       cancel-in-progress: true
 
     steps:
-      - id: timecheck
-        name: Decide whether to run
-        run: |
-          FORCE="${{ github.event.inputs.force_run }}"
-          if [ "$FORCE" = "true" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "Force run requested - bypassing time guard."
-            exit 0
-          fi
-          NY_HOUR="$(TZ=America/New_York date +%H)"
-          if [ "$NY_HOUR" = "06" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "It is 06:00 in New York. Proceeding."
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "It is $NY_HOUR:00 in New York. Skipping."
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.timecheck.outputs.run == 'true'
 
       - name: Set up Python
-        if: steps.timecheck.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install deps
-        if: steps.timecheck.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
       - name: Post rotating screenshot to Bluesky
-        if: steps.timecheck.outputs.run == 'true'
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
