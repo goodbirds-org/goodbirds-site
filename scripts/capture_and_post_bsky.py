@@ -31,69 +31,75 @@ def log(msg: str):
 ROTATION = [
     {
         "name": "Manhattan",
-        "map_url": "https://goodbirds.org/maps/manhattan/index.html",
+        "map_url": "https://goodbirds.org/manhattan/",
         "post_text": "Latest notable bird sightings in Manhattan 🗽🐦 #ebird #nyc #birds",
         "alt_text": "Full-page screenshot of the most recent Manhattan GoodBirds map",
     },
     {
         "name": "Cambridge",
-        "map_url": "https://goodbirds.org/maps/cambridge/index.html",
+        "map_url": "https://goodbirds.org/cambridge/",
         "post_text": "Latest notable bird sightings in Cambridge 🐦📚 #ebird #cambridge #birds",
         "alt_text": "Full-page screenshot of the most recent Cambridge GoodBirds map",
     },
     {
         "name": "Chicago",
-        "map_url": "https://goodbirds.org/maps/chicago/index.html",
+        "map_url": "https://goodbirds.org/chicago/",
         "post_text": "Latest notable bird sightings in Chicago 🌬️🐦 #ebird #chicago #birds",
         "alt_text": "Full-page screenshot of the most recent Chicago GoodBirds map",
     },
     {
         "name": "Portland, OR",
-        "map_url": "https://goodbirds.org/maps/portland-or/index.html",
+        "map_url": "https://goodbirds.org/portland-or/",
         "post_text": "Latest notable bird sightings in Portland, OR 🌲🐦 #rosecity #pdx #ebird #birds",
         "alt_text": "Full-page screenshot of the most recent Portland, OR GoodBirds map",
     },
     {
         "name": "San Diego, CA",
-        "map_url": "https://goodbirds.org/maps/san-diego/index.html",
+        "map_url": "https://goodbirds.org/san-diego/",
         "post_text": "Latest notable bird sightings in San Diego, CA 🌊🐦⚡ #ebird #sandiego #birds",
         "alt_text": "Full-page screenshot of the most recent San Diego GoodBirds map",
     },
     {
         "name": "Philadelphia",
-        "map_url": "https://goodbirds.org/maps/philadelphia/index.html",
+        "map_url": "https://goodbirds.org/philadelphia/",
         "post_text": "Latest notable bird sightings in Philadelphia 🔔🐦 #ebird #philadelphia #birds",
         "alt_text": "Full-page screenshot of the most recent Philadelphia GoodBirds map",
     },
     {
         "name": "Colorado Springs",
-        "map_url": "https://goodbirds.org/maps/colorado-springs/index.html",
+        "map_url": "https://goodbirds.org/colorado-springs/",
         "post_text": "Latest notable bird sightings in Colorado Springs 🏔️🐦 #ebird #coloradosprings #birds",
         "alt_text": "Full-page screenshot of the most recent Colorado Springs GoodBirds map",
     },
     {
         "name": "Fort Worth",
-        "map_url": "https://goodbirds.org/maps/fort-worth/index.html",
+        "map_url": "https://goodbirds.org/fort-worth/",
         "post_text": "Latest notable bird sightings in Fort Worth, TX 🤠🐦 #ebird #fortworth #birds",
         "alt_text": "Full-page screenshot of the current Fort Worth, TX GoodBirds map",
     },
     {
         "name": "Cape May",
-        "map_url": "https://goodbirds.org/maps/cape-may/index.html",
+        "map_url": "https://goodbirds.org/cape-may/",
         "post_text": "Latest notable bird sightings in Cape May, NJ 🏖️🐦 #ebird #capemay #birds",
         "alt_text": "Full-page screenshot of the most recent Cape May, NJ GoodBirds map",
     },
     {
         "name": "San Francisco",
-        "map_url": "https://goodbirds.org/maps/san-francisco/index.html",
+        "map_url": "https://goodbirds.org/san-francisco/",
         "post_text": "Latest notable bird sightings in San Francisco, CA 🌁🐦 #ebird #sanfrancisco #birds",
         "alt_text": "Full-page screenshot of the most recent San Francisco GoodBirds map",
     },
     {
         "name": "Tucson",
-        "map_url": "https://goodbirds.org/maps/tucson/index.html",
+        "map_url": "https://goodbirds.org/tucson/",
         "post_text": "Latest notable bird sightings in Tucson, AZ 🌵🐦 #ebird #tucson #birds",
         "alt_text": "Full-page screenshot of the most recent Tucson GoodBirds map",
+    },
+    {
+        "name": "Montreal, QC",
+        "map_url": "https://goodbirds.org/montreal-qc/",
+        "post_text": "Latest notable bird sightings in Montreal, QC 🍁🐦 #ebird #montreal #birds",
+        "alt_text": "Full-page screenshot of the current Montreal, QC GoodBirds map",
     },
 ]
 
@@ -212,7 +218,6 @@ def main():
         if not extra_tag.startswith("#"):
             extra_tag = "#" + extra_tag
         post_text = f"{post_text} {extra_tag}"
-
 
     # Screenshot and post the same stable map URL
     effective_url = map_url
