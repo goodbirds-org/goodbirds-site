@@ -1,53 +1,157 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Goodbirds Coverage Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-<style>
-  html, body { margin:0; height:100%; }
-  #map { width:100%; height:100%; }
-  .popup h3 { margin:0 0 6px 0; font:600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-  .popup a { text-decoration: none; color: #0a2b42; }
-  .popup a:hover { color: #2c7fb8; }
-</style>
+<head>
+  <meta charset="utf-8">
+  <title>Goodbirds Coverage Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIINfQnk5D1w8f7GN8VJYUNXFaZ51yR3G4=" crossorigin="">
+  <style>
+    html, body, #map {
+      height:100%;
+      margin:0;
+      padding:0;
+    }
+
+    body {
+      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      color:#111;
+    }
+
+    .leaflet-tooltip.goodbirds-tooltip {
+      background:#fff;
+      border:1px solid #d8d8d8;
+      border-radius:10px;
+      box-shadow:0 2px 8px rgba(0,0,0,.16);
+      color:#111;
+      padding:8px 10px;
+    }
+
+    .goodbirds-tooltip a,
+    .goodbirds-popup a {
+      color:#1f6fa8;
+      font-weight:650;
+      text-decoration:none;
+    }
+
+    .goodbirds-tooltip a:hover,
+    .goodbirds-popup a:hover {
+      text-decoration:underline;
+    }
+
+    .goodbirds-popup-title {
+      font-weight:700;
+      font-size:15px;
+      margin-bottom:4px;
+    }
+
+    .goodbirds-popup-meta {
+      color:#555;
+      font-size:13px;
+      margin-bottom:8px;
+    }
+
+    .map-title {
+      position:absolute;
+      top:12px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:500;
+      background:rgba(255,255,255,.94);
+      border:1px solid #ddd;
+      border-radius:999px;
+      box-shadow:0 1px 4px rgba(0,0,0,.12);
+      padding:7px 13px;
+      font-weight:700;
+      pointer-events:none;
+      white-space:nowrap;
+    }
+  </style>
+</head>
 <body>
-  <div id="map" aria-label="Map of cities covered by Goodbirds"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <div id="map"></div>
+  <div class="map-title">Goodbirds Locations</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
-    async function loadCities() {
-      const r = await fetch('./cities.json?ts=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) throw new Error('Failed to load cities.json');
-      return r.json();
+    const cities = [{"slug": "cambridge", "title": "Cambridge, MA & Vicinity", "displayName": "Cambridge", "group": "Massachusetts", "lat": 42.3785, "lon": -71.1156, "maxRadiusKm": 20, "latestUrl": "https://goodbirds.org/maps/cambridge/index.html"}, {"slug": "chicago", "title": "Chicago, IL and Vicinity", "displayName": "Chicago", "group": "Illinois", "lat": 41.8775122, "lon": -87.6252043, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/chicago/index.html"}, {"slug": "manhattan", "title": "Manhattan, NY & Vicinity", "displayName": "Manhattan", "group": "New York", "lat": 40.780902, "lon": -73.972943, "maxRadiusKm": 12, "latestUrl": "https://goodbirds.org/maps/manhattan/index.html"}, {"slug": "portland-or", "title": "Portland, OR & Vicinity", "displayName": "Portland", "group": "Oregon", "lat": 45.526609, "lon": -122.730465, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/portland-or/index.html"}, {"slug": "san-diego", "title": "San Diego, CA & Vicinity", "displayName": "San Diego", "group": "California", "lat": 32.732375, "lon": -117.146884, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/san-diego/index.html"}, {"slug": "greensboro", "title": "Greensboro, NC & Vicinity", "displayName": "Greensboro", "group": "North Carolina", "lat": 36.094567, "lon": -79.78455, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/greensboro/index.html"}, {"slug": "philadelphia", "title": "Philadelphia, PA & Vicinity", "displayName": "Philadelphia", "group": "Pennsylvania", "lat": 39.98275, "lon": -75.19304, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/philadelphia/index.html"}, {"slug": "colorado-springs", "title": "Colorado Springs, CO & Vicinity", "displayName": "Colorado Springs", "group": "Colorado", "lat": 38.89424, "lon": -104.83012, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/colorado-springs/index.html"}, {"slug": "pittsburgh", "title": "Pittsburgh, PA & Vicinity", "displayName": "Pittsburgh", "group": "Pennsylvania", "lat": 40.5189, "lon": -79.9225, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/pittsburgh/index.html"}, {"slug": "minneapolis", "title": "Minneapolis, MN & Vicinity", "displayName": "Minneapolis", "group": "Minnesota", "lat": 44.9723, "lon": -93.3172, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/minneapolis/index.html"}, {"slug": "fort-worth", "title": "Fort Worth, TX & Vicinity", "displayName": "Fort Worth", "group": "Texas", "lat": 32.84336, "lon": -97.477206, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/fort-worth/index.html"}, {"slug": "san-antonio", "title": "San Antonio, TX & Vicinity", "displayName": "San Antonio", "group": "Texas", "lat": 29.2955, "lon": -98.4786, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/san-antonio/index.html"}, {"slug": "cape-may", "title": "Cape May, NJ & Vicinity", "displayName": "Cape May", "group": "New Jersey", "lat": 38.940505, "lon": -74.962141, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/cape-may/index.html"}, {"slug": "magee-marsh", "title": "Magee Marsh, OH & Vicinity", "displayName": "Magee Marsh", "group": "Ohio", "lat": 41.612529, "lon": -83.189286, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/magee-marsh/index.html"}, {"slug": "san-francisco", "title": "San Francisco, CA & Vicinity", "displayName": "San Francisco", "group": "California", "lat": 37.756344, "lon": -122.448917, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/san-francisco/index.html"}, {"slug": "tucson", "title": "Tucson, AZ & Vicinity", "displayName": "Tucson", "group": "Arizona", "lat": 32.231584, "lon": -110.966819, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/tucson/index.html"}, {"slug": "miami", "title": "Miami, FL & Vicinity", "displayName": "Miami", "group": "Florida", "lat": 25.704218, "lon": -80.284366, "maxRadiusKm": 20, "latestUrl": "https://goodbirds.org/maps/miami/index.html"}, {"slug": "estero", "title": "Estero, FL & Vicinity", "displayName": "Estero", "group": "Florida", "lat": 26.433947, "lon": -81.815317, "maxRadiusKm": 20, "latestUrl": "https://goodbirds.org/maps/estero/index.html"}, {"slug": "webster", "title": "Webster, NY & Vicinity", "displayName": "Webster", "group": "New York", "lat": 43.217639, "lon": -77.441932, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/webster/index.html"}, {"slug": "scarsdale", "title": "Scarsdale, NY & Vicinity", "displayName": "Scarsdale", "group": "New York", "lat": 41.00487, "lon": -73.808475, "maxRadiusKm": 20, "latestUrl": "https://goodbirds.org/maps/scarsdale/index.html"}, {"slug": "belmont", "title": "Belmont, MA & Vicinity", "displayName": "Belmont", "group": "Massachusetts", "lat": 42.402405, "lon": -71.184395, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/belmont/index.html"}, {"slug": "hartford-vt", "title": "Hartford, VT and Vicinity", "displayName": "Hartford", "group": "Vermont", "lat": 43.641886, "lon": -72.411335, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/hartford-vt/index.html"}, {"slug": "montreal-qc", "title": "Montreal, QC & Vicinity", "displayName": "Montreal", "group": "Non-US", "lat": 45.502705, "lon": -73.591831, "maxRadiusKm": 15, "latestUrl": "https://goodbirds.org/maps/montreal-qc/index.html"}, {"slug": "whitefield-nh", "title": "Whitefield, NH and Vicinity", "displayName": "Whitefield", "group": "New Hampshire", "lat": 44.358125, "lon": -71.540525, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/whitefield-nh/index.html"}, {"slug": "acadia-national-park", "title": "Acadia National Park, ME", "displayName": "Acadia National Park", "group": "Maine", "lat": 44.362236, "lon": -68.207716, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/acadia-national-park/index.html"}, {"slug": "york-beach", "title": "York Beach, ME and Vicinity", "displayName": "York Beach", "group": "Maine", "lat": 43.163995, "lon": -70.618214, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/york-beach/index.html"}, {"slug": "north-cambridge", "title": "North Cambridge, MA and Vicinity", "displayName": "North Cambridge", "group": "Massachusetts", "lat": 42.400973, "lon": -71.13597, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/north-cambridge/index.html"}, {"slug": "noord-aruba", "title": "Noord, Aruba", "displayName": "Noord, Aruba", "group": "Non-US", "lat": 12.561816, "lon": -70.048131, "maxRadiusKm": 10, "latestUrl": "https://goodbirds.org/maps/noord-aruba/index.html"}];
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
-    function addCity(map, bounds, c) {
-      const { lat, lon, title, latestUrl, maxRadiusKm } = c;
-      L.circle([lat, lon], { radius: maxRadiusKm * 1000, color: '#08519c', weight: 2, fill: false }).addTo(map);
-      const marker = L.circleMarker([lat, lon], { radius: 4, color: '#2c7fb8', fillColor: '#2c7fb8', fillOpacity: 1, weight: 1 }).addTo(map);
-      const safeTitle = String(title || '').replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]));
-      const html = `
-        <div class="popup">
-          <h3>${safeTitle}</h3>
-          <div>Coverage radius: ${maxRadiusKm} km</div>
-          <div style="margin-top:6px;">
-            <a href="${String(latestUrl || '')}" target="_blank" rel="noopener">Open latest map</a>
-          </div>
-        </div>`;
-      marker.bindPopup(html, { maxWidth: 260 });
-      bounds.extend([lat, lon]);
-      bounds.extend([lat + (maxRadiusKm / 111.0), lon]);
+
+    function markerHtml() {
+      return '<div style="width:16px;height:16px;border-radius:50%;background:#2c7fb8;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35);"></div>';
     }
-    async function init() {
-      const cities = await loadCities();
-      const map = L.map('map', { scrollWheelZoom: true }).setView([39.5, -98.35], 4);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
-      const bounds = L.latLngBounds();
-      (cities || []).forEach(c => addCity(map, bounds, c));
-      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
-    }
-    init().catch(() => {
-      document.getElementById('map').innerHTML = '<p style="padding:12px;font:14px system-ui;">Unable to load coverage map.</p>';
+
+    const map = L.map("map", { scrollWheelZoom:false });
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom:19,
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const icon = L.divIcon({
+      className:"goodbirds-location-marker",
+      html:markerHtml(),
+      iconSize:[20,20],
+      iconAnchor:[10,10],
+      popupAnchor:[0,-10]
     });
+
+    const bounds = [];
+
+    cities.forEach(city => {
+      if (typeof city.lat !== "number" || typeof city.lon !== "number") return;
+
+      const label = escapeHtml(city.displayName || city.title || city.slug);
+      const group = escapeHtml(city.group || "");
+      const url = escapeHtml(city.latestUrl || "#");
+      const radius = escapeHtml(city.maxRadiusKm || "");
+
+      const tooltip = `
+        <div>
+          <strong>${label}</strong><br>
+          <a href="${url}" target="_top" rel="noopener">Open location map</a>
+        </div>`;
+
+      const popup = `
+        <div class="goodbirds-popup">
+          <div class="goodbirds-popup-title">${label}</div>
+          <div class="goodbirds-popup-meta">${group}${radius ? " · " + radius + " km max radius" : ""}</div>
+          <a href="${url}" target="_top" rel="noopener">Open location map</a>
+        </div>`;
+
+      const marker = L.marker([city.lat, city.lon], { icon, title: label })
+        .bindTooltip(tooltip, {
+          className:"goodbirds-tooltip",
+          direction:"top",
+          offset:[0,-10],
+          opacity:1,
+          sticky:true,
+          interactive:true
+        })
+        .bindPopup(popup)
+        .addTo(map);
+
+      marker.on("mouseover", function() {
+        marker.openTooltip();
+      });
+
+      bounds.push([city.lat, city.lon]);
+    });
+
+    if (bounds.length) {
+      map.fitBounds(bounds, { padding:[28,28] });
+    } else {
+      map.setView([39.5,-98.35], 4);
+    }
   </script>
 </body>
 </html>
