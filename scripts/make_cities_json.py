@@ -88,10 +88,15 @@ def find_build_matrix(yaml_doc):
     return matrix.get("city", [])
 
 
-def clean_location_name(title: str) -> str:
+def _strip_vicinity(title: str) -> str:
     value = str(title or "").strip()
     value = re.sub(r"\s*&\s*Vicinity$", "", value, flags=re.I)
     value = re.sub(r"\s+and\s+Vicinity$", "", value, flags=re.I)
+    return value.strip()
+
+
+def clean_location_name(title: str) -> str:
+    value = _strip_vicinity(title)
     parts = [part.strip() for part in value.split(",")]
     if len(parts) >= 2:
         region = parts[-1]
@@ -101,9 +106,7 @@ def clean_location_name(title: str) -> str:
 
 
 def location_group(title: str) -> str:
-    value = str(title or "").strip()
-    value = re.sub(r"\s*&\s*Vicinity$", "", value, flags=re.I)
-    value = re.sub(r"\s+and\s+Vicinity$", "", value, flags=re.I)
+    value = _strip_vicinity(title)
     parts = [part.strip() for part in value.split(",")]
     if len(parts) >= 2:
         region = parts[-1]
@@ -113,7 +116,13 @@ def location_group(title: str) -> str:
 
 
 def write_cities_map(cities, out_path: pathlib.Path):
-    # Keep the payload embedded so docs/cities_map.html also works as a standalone page.
+    """Write a simple Leaflet coverage map.
+
+    This intentionally uses Leaflet circleMarker instead of custom divIcon markers. Circle markers
+    do not depend on image assets or CSS-generated marker icons, so they are less fragile in a
+    GitHub Pages iframe. The map starts on the main US/Canada coverage area so the location markers
+    are visible immediately; a Fit all button includes Aruba and any future non-US locations.
+    """
     cities_json = json.dumps(cities, ensure_ascii=False)
     html_text = f"""<!doctype html>
 <html lang="en">
@@ -121,10 +130,9 @@ def write_cities_map(cities, out_path: pathlib.Path):
   <meta charset="utf-8">
   <title>Goodbirds Coverage Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIINfQnk5D1w8f7GN8VJYUNXFaZ51yR3G4=" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    html, body, #map {{
+    html, body {{
       height:100%;
       margin:0;
       padding:0;
@@ -133,6 +141,49 @@ def write_cities_map(cities, out_path: pathlib.Path):
     body {{
       font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       color:#111;
+      background:#f7f7f7;
+    }}
+
+    #map {{
+      position:absolute;
+      inset:0;
+      min-height:360px;
+      background:#eef3f6;
+    }}
+
+    .map-title {{
+      position:absolute;
+      top:12px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:500;
+      background:rgba(255,255,255,.95);
+      border:1px solid #ddd;
+      border-radius:999px;
+      box-shadow:0 1px 4px rgba(0,0,0,.12);
+      padding:7px 13px;
+      font-weight:700;
+      pointer-events:none;
+      white-space:nowrap;
+    }}
+
+    .map-button {{
+      position:absolute;
+      right:12px;
+      top:12px;
+      z-index:510;
+      background:#fff;
+      border:1px solid #ccc;
+      border-radius:999px;
+      box-shadow:0 1px 4px rgba(0,0,0,.12);
+      color:#111;
+      cursor:pointer;
+      font:600 13px/1 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      padding:8px 11px;
+    }}
+
+    .map-button:hover {{
+      background:#f3f7fa;
     }}
 
     .leaflet-tooltip.goodbirds-tooltip {{
@@ -142,6 +193,19 @@ def write_cities_map(cities, out_path: pathlib.Path):
       box-shadow:0 2px 8px rgba(0,0,0,.16);
       color:#111;
       padding:8px 10px;
+    }}
+
+    .goodbirds-tooltip-title,
+    .goodbirds-popup-title {{
+      font-weight:700;
+      font-size:15px;
+      margin-bottom:4px;
+    }}
+
+    .goodbirds-popup-meta {{
+      color:#555;
+      font-size:13px;
+      margin-bottom:8px;
     }}
 
     .goodbirds-tooltip a,
@@ -155,42 +219,14 @@ def write_cities_map(cities, out_path: pathlib.Path):
     .goodbirds-popup a:hover {{
       text-decoration:underline;
     }}
-
-    .goodbirds-popup-title {{
-      font-weight:700;
-      font-size:15px;
-      margin-bottom:4px;
-    }}
-
-    .goodbirds-popup-meta {{
-      color:#555;
-      font-size:13px;
-      margin-bottom:8px;
-    }}
-
-    .map-title {{
-      position:absolute;
-      top:12px;
-      left:50%;
-      transform:translateX(-50%);
-      z-index:500;
-      background:rgba(255,255,255,.94);
-      border:1px solid #ddd;
-      border-radius:999px;
-      box-shadow:0 1px 4px rgba(0,0,0,.12);
-      padding:7px 13px;
-      font-weight:700;
-      pointer-events:none;
-      white-space:nowrap;
-    }}
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div class="map-title">Goodbirds Locations</div>
+  <button class="map-button" type="button" id="fit-all">Fit all</button>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const cities = {cities_json};
 
@@ -203,38 +239,34 @@ def write_cities_map(cities, out_path: pathlib.Path):
         .replace(/'/g, "&#039;");
     }}
 
-    function markerHtml() {{
-      return '<div style="width:16px;height:16px;border-radius:50%;background:#2c7fb8;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35);"></div>';
+    function validCity(city) {{
+      return Number.isFinite(city.lat) && Number.isFinite(city.lon);
     }}
 
-    const map = L.map("map", {{ scrollWheelZoom:false }});
+    const map = L.map("map", {{
+      scrollWheelZoom:false,
+      preferCanvas:true,
+      worldCopyJump:true
+    }}).setView([39.5, -98.35], 4);
 
     L.tileLayer("https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png", {{
-      maxZoom:19,
+      maxZoom:18,
       attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }}).addTo(map);
 
-    const icon = L.divIcon({{
-      className:"goodbirds-location-marker",
-      html:markerHtml(),
-      iconSize:[20,20],
-      iconAnchor:[10,10],
-      popupAnchor:[0,-10]
-    }});
+    const allBounds = [];
+    const northAmericaBounds = [];
 
-    const bounds = [];
-
-    cities.forEach(city => {{
-      if (typeof city.lat !== "number" || typeof city.lon !== "number") return;
-
-      const label = escapeHtml(city.displayName || city.title || city.slug);
+    cities.filter(validCity).forEach(city => {{
+      const label = escapeHtml(city.displayName || city.title || city.slug || "Location");
       const group = escapeHtml(city.group || "");
       const url = escapeHtml(city.latestUrl || "#");
-      const radius = escapeHtml(city.maxRadiusKm || "");
+      const radius = city.maxRadiusKm ? escapeHtml(city.maxRadiusKm) : "";
+      const latlng = [city.lat, city.lon];
 
       const tooltip = `
-        <div>
-          <strong>${{label}}</strong><br>
+        <div class="goodbirds-tooltip-inner">
+          <div class="goodbirds-tooltip-title">${{label}}</div>
           <a href="${{url}}" target="_top" rel="noopener">Open location map</a>
         </div>`;
 
@@ -245,30 +277,46 @@ def write_cities_map(cities, out_path: pathlib.Path):
           <a href="${{url}}" target="_top" rel="noopener">Open location map</a>
         </div>`;
 
-      const marker = L.marker([city.lat, city.lon], {{ icon, title: label }})
-        .bindTooltip(tooltip, {{
-          className:"goodbirds-tooltip",
-          direction:"top",
-          offset:[0,-10],
-          opacity:1,
-          sticky:true,
-          interactive:true
-        }})
-        .bindPopup(popup)
-        .addTo(map);
+      const marker = L.circleMarker(latlng, {{
+        radius:8,
+        color:"#ffffff",
+        weight:2,
+        fillColor:"#2c7fb8",
+        fillOpacity:0.95,
+        opacity:1
+      }}).addTo(map);
 
-      marker.on("mouseover", function() {{
-        marker.openTooltip();
+      marker.bindTooltip(tooltip, {{
+        className:"goodbirds-tooltip",
+        direction:"top",
+        offset:[0,-8],
+        opacity:1,
+        sticky:true,
+        interactive:true
       }});
 
-      bounds.push([city.lat, city.lon]);
+      marker.bindPopup(popup, {{ maxWidth:260 }});
+      marker.on("mouseover", function() {{ marker.openTooltip(); }});
+
+      allBounds.push(latlng);
+
+      // Keep the initial view focused on the primary US/Canada coverage area.
+      // Non-US locations such as Aruba are still present and included by the Fit all button.
+      if (city.lon > -170 && city.lon < -50 && city.lat > 20 && city.lat < 70) {{
+        northAmericaBounds.push(latlng);
+      }}
     }});
 
-    if (bounds.length) {{
-      map.fitBounds(bounds, {{ padding:[28,28] }});
-    }} else {{
-      map.setView([39.5,-98.35], 4);
+    function fitBounds(points) {{
+      if (!points.length) return;
+      map.fitBounds(points, {{ padding:[34,34], maxZoom:5 }});
     }}
+
+    fitBounds(northAmericaBounds.length ? northAmericaBounds : allBounds);
+
+    document.getElementById("fit-all").addEventListener("click", function() {{
+      fitBounds(allBounds);
+    }});
   </script>
 </body>
 </html>
