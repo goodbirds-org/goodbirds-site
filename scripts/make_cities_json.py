@@ -208,14 +208,12 @@ def write_cities_map(cities, out_path: pathlib.Path):
       margin-bottom:8px;
     }}
 
-    .goodbirds-tooltip a,
     .goodbirds-popup a {{
       color:#1f6fa8;
       font-weight:650;
       text-decoration:none;
     }}
 
-    .goodbirds-tooltip a:hover,
     .goodbirds-popup a:hover {{
       text-decoration:underline;
     }}
@@ -267,7 +265,6 @@ def write_cities_map(cities, out_path: pathlib.Path):
       const tooltip = `
         <div class="goodbirds-tooltip-inner">
           <div class="goodbirds-tooltip-title">${{label}}</div>
-          <a href="${{url}}" target="_top" rel="noopener">Open location map</a>
         </div>`;
 
       const popup = `
@@ -292,7 +289,7 @@ def write_cities_map(cities, out_path: pathlib.Path):
         offset:[0,-8],
         opacity:1,
         sticky:true,
-        interactive:true
+        interactive:false
       }});
 
       marker.bindPopup(popup, {{ maxWidth:260 }});
@@ -300,11 +297,8 @@ def write_cities_map(cities, out_path: pathlib.Path):
 
       allBounds.push(latlng);
 
-      // Keep the initial view focused on the primary US/Canada coverage area.
-      // Non-US locations such as Aruba are still present and included by the Fit all button.
-      if (city.lon > -170 && city.lon < -50 && city.lat > 20 && city.lat < 70) {{
-        northAmericaBounds.push(latlng);
-      }}
+      // Include every location, including Aruba, in the initial map extent.
+      northAmericaBounds.push(latlng);
     }});
 
     function fitBounds(points) {{
@@ -312,7 +306,7 @@ def write_cities_map(cities, out_path: pathlib.Path):
       map.fitBounds(points, {{ padding:[34,34], maxZoom:5 }});
     }}
 
-    fitBounds(northAmericaBounds.length ? northAmericaBounds : allBounds);
+    fitBounds(allBounds);
 
     document.getElementById("fit-all").addEventListener("click", function() {{
       fitBounds(allBounds);
