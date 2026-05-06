@@ -304,6 +304,10 @@ def write_cities_map(cities, out_path: pathlib.Path):
     function fitBounds(points) {{
       if (!points.length) return;
       map.fitBounds(points, {{ padding:[34,34], maxZoom:5 }});
+      const fittedZoom = map.getZoom();
+      if (Number.isFinite(fittedZoom)) {{
+        map.setZoom(Math.max(1, fittedZoom - 1));
+      }}
     }}
 
     fitBounds(allBounds);
