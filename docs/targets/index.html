@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Goodbirds Target Species Maps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --ink:#111;
+      --muted:#555;
+      --line:#e5e5e5;
+      --bg:#fafafa;
+      --card:#fff;
+      --radius:14px;
+    }
+
+    html,
+    body {
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--ink);
+      font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    }
+
+    .wrap {
+      max-width:1040px;
+      margin:40px auto;
+      padding:0 20px;
+    }
+
+    header {
+      margin-bottom:28px;
+    }
+
+    h1 {
+      font-size:30px;
+      margin:0 0 8px;
+    }
+
+    .lead {
+      color:var(--muted);
+      max-width:760px;
+      margin:0;
+      font-size:17px;
+    }
+
+    .back {
+      display:inline-block;
+      margin-bottom:22px;
+      color:#1f6fa8;
+      text-decoration:none;
+      font-weight:650;
+    }
+
+    .back:hover {
+      text-decoration:underline;
+    }
+
+    .group {
+      margin:28px 0 36px;
+    }
+
+    .group h2 {
+      font-size:20px;
+      border-top:1px solid var(--line);
+      padding-top:18px;
+      margin:0 0 14px;
+    }
+
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:14px;
+    }
+
+    .card {
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+
+    .card:hover {
+      transform:translateY(-2px);
+      box-shadow:0 6px 18px rgba(0,0,0,.08);
+      border-color:#d9d9d9;
+    }
+
+    .card a {
+      display:block;
+      color:inherit;
+      text-decoration:none;
+      padding:16px 18px;
+    }
+
+    .title {
+      display:block;
+      font-weight:700;
+      font-size:18px;
+      margin-bottom:5px;
+    }
+
+    .subtitle {
+      display:block;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:10px;
+    }
+
+    .meta {
+      display:block;
+      color:#777;
+      font-size:13px;
+    }
+
+    .error {
+      background:#fff8f8;
+      border:1px solid #f1c9c9;
+      border-radius:var(--radius);
+      padding:14px 16px;
+      color:#7a1f1f;
+    }
+
+    @media (max-width:800px) {
+      .grid {
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+    }
+
+    @media (max-width:560px) {
+      .wrap {
+        margin:24px auto;
+        padding:0 16px;
+      }
+
+      .grid {
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="back" href="../">← Goodbirds Maps</a>
+
+    <header>
+      <h1>Target Species Maps</h1>
+      <p class="lead">Focused Goodbirds maps for selected species in selected places. These are different from the regular notable-birds city maps.</p>
+    </header>
+
+    <div id="target-list"></div>
+  </main>
+
+  <script>
+    function makeCard(target) {
+      const article = document.createElement("article");
+      article.className = "card";
+
+      const link = document.createElement("a");
+      link.href = target.url;
+
+      const title = document.createElement("span");
+      title.className = "title";
+      title.textContent = target.title;
+
+      const subtitle = document.createElement("span");
+      subtitle.className = "subtitle";
+      subtitle.textContent = target.subtitle;
+
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = `${target.centerName} · ${target.radiusLabel} · ${target.lookbackLabel}`;
+
+      link.appendChild(title);
+      link.appendChild(subtitle);
+      link.appendChild(meta);
+      article.appendChild(link);
+
+      return article;
+    }
+
+    function renderTargets(targets) {
+      const root = document.getElementById("target-list");
+      const grouped = new Map();
+
+      targets.forEach(target => {
+        const group = target.region || "Other";
+        if (!grouped.has(group)) grouped.set(group, []);
+        grouped.get(group).push(target);
+      });
+
+      Array.from(grouped.keys()).sort().forEach(region => {
+        const section = document.createElement("section");
+        section.className = "group";
+
+        const heading = document.createElement("h2");
+        heading.textContent = region;
+
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        grouped.get(region)
+          .sort((a, b) => a.title.localeCompare(b.title))
+          .forEach(target => grid.appendChild(makeCard(target)));
+
+        section.appendChild(heading);
+        section.appendChild(grid);
+        root.appendChild(section);
+      });
+    }
+
+    fetch("targets.json", {cache: "no-store"})
+      .then(response => {
+        if (!response.ok) throw new Error("Could not load targets.json");
+        return response.json();
+      })
+      .then(renderTargets)
+      .catch(error => {
+        document.getElementById("target-list").innerHTML =
+          '<div class="error"><strong>Target maps could not be loaded.</strong><br>Check that targets.json exists and is valid.</div>';
+        console.error(error);
+      });
+  </script>
+</body>
+</html>
