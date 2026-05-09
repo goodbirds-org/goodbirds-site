@@ -154,6 +154,7 @@
 
   <script>
     const CENTER = [12.561674, -70.048173];
+    const SEARCH_RADIUS_M = 10000;
     const RINGS_KM = [1, 5, 10];
 
     const map = L.map("map", {
@@ -221,6 +222,11 @@
       });
     }
 
+    function fitToSearchRadius() {
+      const searchBounds = L.circle(CENTER, { radius: SEARCH_RADIUS_M }).getBounds();
+      map.fitBounds(searchBounds, { padding: [48, 48] });
+    }
+
     function formatUpdated(value) {
       if (!value) return "Updated time unavailable";
       const dt = new Date(value);
@@ -271,9 +277,11 @@
     function renderObservations(payload) {
       const observations = Array.isArray(payload.observations) ? payload.observations : [];
       const species = Array.isArray(payload.species) ? payload.species : [];
+      const distKm = Number(payload.distKm) || 10;
+      const backDays = Number(payload.backDays) || 3;
 
       document.getElementById("updated").textContent =
-        `${formatUpdated(payload.lastUpdated)} · ${payload.distKm || 10} km radius · last ${payload.backDays || 3} day(s)`;
+        `${formatUpdated(payload.lastUpdated)} · ${distKm} km radius · last ${backDays} day(s)`;
 
       renderLegend(species);
       addRings();
@@ -310,12 +318,11 @@
 
       if (!groups.size) {
         showNotice("No current target species observations for the selected window.");
+        fitToSearchRadius();
         return;
       }
 
       hideNotice();
-
-      const bounds = [];
 
       groups.forEach(group => {
         const seen = new Set();
@@ -356,14 +363,9 @@
           .addTo(map)
           .bindTooltip(group.speciesName)
           .bindPopup(popup, { maxWidth: 320 });
-
-        bounds.push([group.lat, group.lng]);
       });
 
-      if (bounds.length) {
-        map.fitBounds(bounds.concat([CENTER]), { padding: [48, 48] });
-        if (map.getZoom() > 15) map.setZoom(15);
-      }
+      fitToSearchRadius();
     }
 
     fetch("data/observations.json", { cache: "no-store" })
@@ -375,6 +377,7 @@
       .catch(error => {
         console.error(error);
         addRings();
+        fitToSearchRadius();
         document.getElementById("updated").textContent = "Observation data could not be loaded.";
         showNotice("Observation data could not be loaded. Run the Build Target Species Maps workflow.");
       });
