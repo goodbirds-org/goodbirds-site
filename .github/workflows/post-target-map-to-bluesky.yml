@@ -8,10 +8,12 @@ on:
       target:
         description: "Force a specific target map"
         required: false
-        default: "Estero Target Species"
+        default: ""
         type: choice
         options:
+          - ""
           - "Estero Target Species"
+          - "Noord, Aruba Target Species"
       extra_hashtag:
         description: "Optional extra hashtags. Space-separated. Example: '#floridabirds #birding'"
         required: false
@@ -41,14 +43,58 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
+      - name: Choose target species map
+        id: choose-target
+        shell: bash
+        env:
+          FORCE_TARGET: ${{ github.event.inputs.target }}
+        run: |
+          set -euo pipefail
+
+          target="${FORCE_TARGET:-}"
+
+          if [ -z "$target" ]; then
+            # Separate target-map rotation only.
+            # Odd ISO weeks: Estero. Even ISO weeks: Noord, Aruba.
+            week="$(date -u +%V)"
+            if [ $((10#$week % 2)) -eq 0 ]; then
+              target="Noord, Aruba Target Species"
+            else
+              target="Estero Target Species"
+            fi
+          fi
+
+          case "$target" in
+            "Estero Target Species")
+              {
+                echo 'map_url=https://goodbirds.org/targets/estero/'
+                echo 'post_text=Target species sightings near Koreshan State Park in Estero, FL: Burrowing Owls, Limpkins, Roseate Spoonbills, and Painted Buntings 🦉🐦 #ebird #birds #florida'
+                echo 'alt_text=Full-page screenshot of the Goodbirds target species map for Estero, Florida'
+              } >> "$GITHUB_OUTPUT"
+              ;;
+
+            "Noord, Aruba Target Species")
+              {
+                echo 'map_url=https://goodbirds.org/targets/noord-aruba/'
+                echo 'post_text=Target species sightings near Noord, Aruba: Brown Booby, Purple Gallinule, Venezuelan Troupial, Crested Caracara, and Ruby-topaz Hummingbird 🐦 #ebird #birds #aruba'
+                echo 'alt_text=Full-page screenshot of the Goodbirds target species map for Noord, Aruba'
+              } >> "$GITHUB_OUTPUT"
+              ;;
+
+            *)
+              echo "Unknown target: $target" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Post target species map to Bluesky
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
 
-          FORCE_MAP_URL: "https://goodbirds.org/targets/estero/"
-          FORCE_POST_TEXT: "Target species sightings near Koreshan State Park in Estero, FL: Burrowing Owls, Limpkins, Roseate Spoonbills, and Painted Buntings 🦉🐦 #ebird #birds #florida"
-          FORCE_ALT_TEXT: "Full-page screenshot of the Goodbirds target species map for Estero, Florida"
+          FORCE_MAP_URL: ${{ steps.choose-target.outputs.map_url }}
+          FORCE_POST_TEXT: ${{ steps.choose-target.outputs.post_text }}
+          FORCE_ALT_TEXT: ${{ steps.choose-target.outputs.alt_text }}
 
           EXTRA_HASHTAG: ${{ github.event.inputs.extra_hashtag }}
         run: |

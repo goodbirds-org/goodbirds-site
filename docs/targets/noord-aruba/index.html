@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Noord, Aruba Target Species - Goodbirds</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: #111;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      background: #eef3f6;
+    }
+
+    .gb-panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 500;
+      width: min(360px, calc(100vw - 24px));
+      background: rgba(255,255,255,.96);
+      border: 1px solid #d8d8d8;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.16);
+      padding: 12px 14px;
+    }
+
+    .gb-panel h1 {
+      font-size: 18px;
+      line-height: 1.2;
+      margin: 0 0 4px;
+    }
+
+    .gb-panel p {
+      margin: 4px 0;
+      color: #444;
+    }
+
+    .gb-meta {
+      font-size: 12px;
+      color: #555;
+      margin-top: 8px;
+    }
+
+    .gb-legend {
+      display: grid;
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .gb-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+    }
+
+    .gb-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1.5px solid #222;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .gb-back {
+      display: inline-block;
+      margin-top: 10px;
+      color: #1f6fa8;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .gb-back:hover {
+      text-decoration: underline;
+    }
+
+    .gb-popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .gb-popup-meta {
+      color: #444;
+      margin-bottom: 6px;
+    }
+
+    .gb-popup a {
+      color: #1f6fa8;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .gb-popup a:hover {
+      text-decoration: underline;
+    }
+
+    .gb-notice {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      z-index: 500;
+      max-width: min(520px, calc(100vw - 24px));
+      background: rgba(255,255,255,.96);
+      border: 1px solid #d8d8d8;
+      border-radius: 999px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.14);
+      padding: 8px 13px;
+      color: #444;
+      display: none;
+    }
+
+    @media (max-width: 640px) {
+      .gb-panel {
+        font-size: 13px;
+      }
+
+      .gb-panel h1 {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <aside class="gb-panel" aria-label="Map information">
+    <h1>Noord, Aruba Target Species</h1>
+    <p>Recent eBird observations for Brown Booby, Purple Gallinule, Venezuelan Troupial, Crested Caracara, and Ruby-topaz Hummingbird.</p>
+    <div class="gb-meta" id="updated">Loading observations...</div>
+
+    <div class="gb-legend" id="legend" aria-label="Species legend"></div>
+
+    <a class="gb-back" href="../">All target species maps</a>
+  </aside>
+
+  <div class="gb-notice" id="notice"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const CENTER = [12.561674, -70.048173];
+    const RINGS_KM = [1, 5, 10];
+
+    const map = L.map("map", {
+      scrollWheelZoom: true,
+      preferCanvas: true
+    }).setView(CENTER, 12);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function checklistUrl(obs) {
+      if (!obs.subId) return "";
+      return "https://ebird.org/checklist/" + encodeURIComponent(obs.subId);
+    }
+
+    function markerIcon(color) {
+      return L.divIcon({
+        className: "",
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:1.5px solid #222;"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+      });
+    }
+
+    function addRings() {
+      L.circleMarker(CENTER, {
+        radius: 4,
+        color: "#2c7fb8",
+        fillColor: "#2c7fb8",
+        fillOpacity: 1,
+        weight: 2
+      }).addTo(map).bindTooltip("Center");
+
+      RINGS_KM.forEach((km, idx) => {
+        const isOuter = idx === RINGS_KM.length - 1;
+        const color = isOuter ? "#08519c" : "#555";
+
+        L.circle(CENTER, {
+          radius: km * 1000,
+          color: color,
+          weight: isOuter ? 3 : 2,
+          opacity: 0.9,
+          fill: false,
+          dashArray: isOuter ? null : "6,8"
+        }).addTo(map);
+
+        L.marker([CENTER[0] + km / 111.0, CENTER[1]], {
+          icon: L.divIcon({
+            className: "",
+            html: `<div style="font-size:12px;color:${color};font-weight:${isOuter ? "700" : "400"};">${km} km</div>`
+          }),
+          interactive: false
+        }).addTo(map);
+      });
+    }
+
+    function formatUpdated(value) {
+      if (!value) return "Updated time unavailable";
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return "Updated: " + value;
+      return "Updated: " + dt.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short"
+      });
+    }
+
+    function renderLegend(species) {
+      const legend = document.getElementById("legend");
+      legend.innerHTML = "";
+
+      species.forEach(sp => {
+        const row = document.createElement("div");
+        row.className = "gb-legend-row";
+
+        const dot = document.createElement("span");
+        dot.className = "gb-dot";
+        dot.style.background = sp.color || "#666";
+
+        const label = document.createElement("span");
+        label.textContent = sp.name || sp.code || "Unknown species";
+
+        row.appendChild(dot);
+        row.appendChild(label);
+        legend.appendChild(row);
+      });
+    }
+
+    function showNotice(message) {
+      const notice = document.getElementById("notice");
+      notice.textContent = message;
+      notice.style.display = "block";
+    }
+
+    function renderObservations(payload) {
+      const observations = Array.isArray(payload.observations) ? payload.observations : [];
+      const species = Array.isArray(payload.species) ? payload.species : [];
+
+      document.getElementById("updated").textContent =
+        `${formatUpdated(payload.lastUpdated)} · ${payload.distKm || 10} km radius · last ${payload.backDays || 3} day(s)`;
+
+      renderLegend(species);
+      addRings();
+
+      const groups = new Map();
+
+      observations.forEach(obs => {
+        if (!Number.isFinite(obs.lat) || !Number.isFinite(obs.lng)) return;
+
+        const speciesName = obs.displayName || obs.comName || "Unknown species";
+        const color = obs.markerColor || "#666666";
+        const key = [
+          Number(obs.lat).toFixed(6),
+          Number(obs.lng).toFixed(6),
+          speciesName
+        ].join("|");
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            lat: obs.lat,
+            lng: obs.lng,
+            speciesName,
+            color,
+            locName: obs.locName || "Unknown location",
+            observations: []
+          });
+        }
+
+        groups.get(key).observations.push(obs);
+      });
+
+      if (!groups.size) {
+        showNotice("No current target species observations for the selected window.");
+        return;
+      }
+
+      const bounds = [];
+
+      groups.forEach(group => {
+        const seen = new Set();
+        const checklistItems = group.observations
+          .filter(obs => {
+            const id = obs.subId || `${obs.obsDt}-${obs.howMany}`;
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          })
+          .sort((a, b) => String(b.obsDt || "").localeCompare(String(a.obsDt || "")))
+          .map(obs => {
+            const count = obs.howMany ? ` (${escapeHtml(obs.howMany)})` : "";
+            const date = escapeHtml(obs.obsDt || "");
+            const url = checklistUrl(obs);
+
+            if (url) {
+              return `<li><a href="${url}" target="_blank" rel="noopener">Checklist</a> - ${date}${count}</li>`;
+            }
+
+            return `<li>${date}${count}</li>`;
+          })
+          .join("");
+
+        const popup = `
+          <div class="gb-popup">
+            <div class="gb-popup-title">${escapeHtml(group.speciesName)}</div>
+            <div class="gb-popup-meta"><strong>Location:</strong> ${escapeHtml(group.locName)}</div>
+            <div><strong>Checklists:</strong></div>
+            <ul style="margin:6px 0 0 16px;padding:0;">${checklistItems}</ul>
+          </div>
+        `;
+
+        L.marker([group.lat, group.lng], {
+          icon: markerIcon(group.color),
+          title: group.speciesName
+        })
+          .addTo(map)
+          .bindTooltip(group.speciesName)
+          .bindPopup(popup, { maxWidth: 320 });
+
+        bounds.push([group.lat, group.lng]);
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds.concat([CENTER]), { padding: [48, 48], maxZoom: 13 });
+      }
+    }
+
+    fetch("data/observations.json", { cache: "no-store" })
+      .then(response => {
+        if (!response.ok) throw new Error("Could not load observations.json");
+        return response.json();
+      })
+      .then(renderObservations)
+      .catch(error => {
+        console.error(error);
+        addRings();
+        document.getElementById("updated").textContent = "Observation data could not be loaded.";
+        showNotice("Observation data could not be loaded. Run the Build Target Species Maps workflow.");
+      });
+  </script>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    gtag("config", "G-NYEBPC2JEZ");
+  </script>
+</body>
+</html>
