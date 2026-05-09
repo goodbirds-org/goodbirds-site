@@ -262,6 +262,12 @@
       notice.style.display = "block";
     }
 
+    function hideNotice() {
+      const notice = document.getElementById("notice");
+      notice.textContent = "";
+      notice.style.display = "none";
+    }
+
     function renderObservations(payload) {
       const observations = Array.isArray(payload.observations) ? payload.observations : [];
       const species = Array.isArray(payload.species) ? payload.species : [];
@@ -275,20 +281,23 @@
       const groups = new Map();
 
       observations.forEach(obs => {
-        if (!Number.isFinite(obs.lat) || !Number.isFinite(obs.lng)) return;
+        const lat = Number(obs.lat);
+        const lng = Number(obs.lng);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
         const speciesName = obs.displayName || obs.comName || "Unknown species";
         const color = obs.markerColor || "#666666";
         const key = [
-          Number(obs.lat).toFixed(6),
-          Number(obs.lng).toFixed(6),
+          lat.toFixed(6),
+          lng.toFixed(6),
           speciesName
         ].join("|");
 
         if (!groups.has(key)) {
           groups.set(key, {
-            lat: obs.lat,
-            lng: obs.lng,
+            lat,
+            lng,
             speciesName,
             color,
             locName: obs.locName || "Unknown location",
@@ -303,6 +312,8 @@
         showNotice("No current target species observations for the selected window.");
         return;
       }
+
+      hideNotice();
 
       const bounds = [];
 
@@ -350,7 +361,8 @@
       });
 
       if (bounds.length) {
-        map.fitBounds(bounds.concat([CENTER]), { padding: [48, 48], maxZoom: 13 });
+        map.fitBounds(bounds.concat([CENTER]), { padding: [48, 48] });
+        if (map.getZoom() > 15) map.setZoom(15);
       }
     }
 
