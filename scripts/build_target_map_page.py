@@ -22,7 +22,7 @@ GA_SNIPPET = """
 </script>
 """
 
-VERSION = "GOODBIRDS_TARGET_SPECIES_V8_RADIUS_RINGS_2026-05-11"
+VERSION = "GOODBIRDS_TARGET_SPECIES_V9_CUSTOM_RADIUS_RINGS_2026-05-11"
 
 
 def esc(s):
@@ -106,12 +106,20 @@ def icon_html(color):
     )
 
 
-def add_rings(m, center, dist_km):
-    """Add visible search-radius rings to the map only, not the legend."""
-    try:
-        dist = float(dist_km)
-    except Exception:
-        dist = 0
+def ring_config_for_target(title, out_path):
+    """Return custom map ring specs. Rings display on the map only, not in the legend."""
+    key = f"{title} {out_path}".lower()
+    if "aruba" in key or "noord" in key:
+        return {"unit": "km", "values": [1, 5, 10]}
+    if "estero" in key:
+        return {"unit": "mi", "values": [1, 5, 10, 20]}
+    return {"unit": "mi", "values": [1, 5, 10, 20]}
+
+
+def add_rings(m, center, ring_config):
+    """Add custom visible radius rings to the map only, not the legend."""
+    unit = (ring_config or {}).get("unit", "mi")
+    values = list((ring_config or {}).get("values") or [])
 
     # Center marker, matching the location notable map style.
     folium.CircleMarker(
@@ -124,17 +132,23 @@ def add_rings(m, center, dist_km):
         interactive=False,
     ).add_to(m)
 
-    ring_miles = [1, 5, 10, 20]
-    visible = [mi for mi in ring_miles if mi * 1.609344 <= dist + 0.1]
-    if not visible:
+    if not values:
         return
 
-    for mi in visible:
-        is_outer = mi == visible[-1]
+    for value in values:
+        try:
+            ring_value = float(value)
+        except Exception:
+            continue
+
+        radius_m = ring_value * 1000.0 if unit == "km" else ring_value * 1609.344
+        label = f"{int(ring_value) if ring_value.is_integer() else ring_value:g} {unit}"
+        is_outer = value == values[-1]
         color = "#08519c" if is_outer else "#475569"
+
         folium.Circle(
             location=center,
-            radius=mi * 1609.344,
+            radius=radius_m,
             color=color,
             weight=2 if is_outer else 1.5,
             opacity=0.75 if is_outer else 0.55,
@@ -144,15 +158,15 @@ def add_rings(m, center, dist_km):
         ).add_to(m)
 
         # Put small labels north of the center. They are map annotations, not legend entries.
-        label_lat = center[0] + (mi * 1.609344 / 111.0)
+        label_lat = center[0] + ((radius_m / 1000.0) / 111.0)
         label_html = (
             f"<div style='font:600 11px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;"
             f"color:{color};background:rgba(255,255,255,.82);border:1px solid rgba(71,85,105,.35);"
-            f"border-radius:999px;padding:2px 5px;white-space:nowrap'>{mi} mi</div>"
+            f"border-radius:999px;padding:2px 5px;white-space:nowrap'>{label}</div>"
         )
         folium.Marker(
             location=[label_lat, center[1]],
-            icon=folium.DivIcon(html=label_html, icon_size=(44, 16), icon_anchor=(22, 8)),
+            icon=folium.DivIcon(html=label_html, icon_size=(48, 16), icon_anchor=(24, 8)),
             interactive=False,
         ).add_to(m)
 
@@ -256,7 +270,7 @@ def main():
     Fullscreen().add_to(m)
     LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
     MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
-    add_rings(m, center, data.get("distKm") or 0)
+    add_rings(m, center, ring_config_for_target(args.title, out_path))
 
     species_rows = []
     layer_names = OrderedDict()
