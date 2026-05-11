@@ -1,592 +1,189 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bird Sightings — Koreshan State Park Area</title>
-
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        html, body {
-            height: 100%;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        #map { height: 100vh; width: 100%; }
-
-        /* ── Info Panel ───────────────────────────────────── */
-        #info-panel {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            z-index: 1000;
-            background: rgba(255,255,255,0.96);
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-            padding: 15px 18px;
-            min-width: 225px;
-            max-width: 255px;
-        }
-
-        #info-panel h1 {
-            font-size: 13px;
-            font-weight: 700;
-            color: #2c3e50;
-            text-align: center;
-            line-height: 1.55;
-            margin-bottom: 12px;
-        }
-
-        .divider {
-            border: none;
-            border-top: 1px solid #eee;
-            margin: 10px 0;
-        }
-
-        .legend-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 7px 0;
-            font-size: 13px;
-            color: #3a3a3a;
-        }
-        .legend-dot {
-            width: 14px; height: 14px;
-            border-radius: 50%;
-            border: 2px solid rgba(0,0,0,0.15);
-            flex-shrink: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
-        .legend-count {
-            margin-left: auto;
-            font-weight: 700;
-            font-size: 14px;
-        }
-        .legend-subtitle {
-            font-size: 10px;
-            color: #aaa;
-            text-align: center;
-            margin-top: 4px;
-        }
-
-        .ring-legend-title {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: #aaa;
-            margin-bottom: 5px;
-        }
-        .ring-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 4px 0;
-            font-size: 11px;
-            color: #666;
-        }
-        .ring-sample { width: 28px; height: 0; flex-shrink: 0; }
-
-        #status-section { font-size: 11px; color: #888; }
-        #status-msg { font-weight: 600; color: #666; margin-bottom: 3px; }
-        #updated-time { font-size: 10px; color: #bbb; }
-
-        /* ── Loading Overlay ──────────────────────────────── */
-        #loading-overlay {
-            position: absolute;
-            inset: 0;
-            z-index: 2000;
-            background: rgba(255,255,255,0.78);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 15px;
-            color: #555;
-            gap: 10px;
-        }
-        .spin {
-            display: inline-block;
-            animation: spin 1.1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* ── Popup ────────────────────────────────────────── */
-        .bp-header {
-            font-size: 15px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-        .bp-loc {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #f0f0f0;
-            word-break: break-word;
-        }
-        .bp-cl-section-title {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #aaa;
-            margin-bottom: 6px;
-        }
-        .bp-cl-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-            margin: 5px 0;
-            font-size: 12px;
-        }
-        .bp-cl-date { color: #444; }
-        .bp-cl-count { color: #999; font-size: 11px; white-space: nowrap; }
-        .bp-cl-link a {
-            color: #2980b9;
-            font-weight: 600;
-            text-decoration: none;
-            white-space: nowrap;
-        }
-        .bp-cl-link a:hover { text-decoration: underline; }
-        .bp-hotspot {
-            margin-top: 10px;
-            padding-top: 8px;
-            border-top: 1px solid #f0f0f0;
-            font-size: 11px;
-        }
-        .bp-hotspot a { color: #27ae60; text-decoration: none; }
-        .bp-hotspot a:hover { text-decoration: underline; }
-
-        /* Leaflet overrides */
-        .leaflet-popup-content-wrapper {
-            border-radius: 9px !important;
-            padding: 0 !important;
-        }
-        .leaflet-popup-content {
-            margin: 14px 16px !important;
-            min-width: 230px;
-        }
-        .leaflet-tooltip {
-            font-family: inherit;
-            font-size: 12px;
-            border-radius: 6px !important;
-            border: 1px solid rgba(0,0,0,0.1) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estero, FL Target Species | Goodbirds</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ9omV9oDZDn8jA3asSO7vpBv+4jrA=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2933; }
+    #map { height: 100%; width: 100%; }
+    .gb-panel { position: absolute; z-index: 1000; left: 16px; top: 16px; width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.94); border-radius: 16px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 16px; box-sizing: border-box; }
+    .gb-panel h1 { margin: 0 0 4px; font-size: 20px; line-height: 1.2; }
+    .gb-meta { margin: 0 0 12px; color: #52616b; font-size: 13px; line-height: 1.35; }
+    .gb-total { font-weight: 700; margin: 10px 0 12px; font-size: 14px; }
+    .gb-species-list { display: grid; gap: 8px; margin: 0 0 12px; }
+    .gb-species-row { display: grid; grid-template-columns: 22px 16px 1fr; gap: 8px; align-items: start; padding: 8px; border: 1px solid #e3e8ef; border-radius: 10px; background: #fff; }
+    .gb-species-row input { margin-top: 2px; }
+    .gb-swatch { width: 13px; height: 13px; border-radius: 50%; margin-top: 3px; border: 1px solid rgba(0,0,0,.35); }
+    .gb-species-name { font-weight: 700; font-size: 14px; }
+    .gb-counts { display: block; margin-top: 2px; color: #52616b; font-size: 12px; }
+    .gb-row-off { opacity: .48; }
+    .gb-footer { border-top: 1px solid #e3e8ef; padding-top: 10px; font-size: 13px; }
+    .gb-footer a { color: #0f766e; font-weight: 700; text-decoration: none; }
+    .gb-footer a:hover { text-decoration: underline; }
+    .gb-popup-title { font-weight: 700; margin-bottom: 4px; }
+    .gb-popup-row { margin: 2px 0; }
+    @media (max-width: 640px) { .gb-panel { left: 10px; right: 10px; top: 10px; width: auto; max-height: 44vh; } }
+  </style>
 </head>
 <body>
+  <div id="map"></div>
+  <aside class="gb-panel" aria-label="Target species legend">
+    <h1>Estero, FL Target Species</h1>
+    <p class="gb-meta" id="updated-meta">Loading recent target species sightings...</p>
+    <div class="gb-total" id="location-total"></div>
+    <div class="gb-species-list" id="species-list"></div>
+    <div class="gb-footer"><a href="../">All target species maps</a></div>
+  </aside>
+  <script>
+    const DATA_URL = './data/observations.json';
+    const FALLBACK_CENTER = [26.4317, -81.8187];
+    const FALLBACK_ZOOM = 10;
 
-<!-- Loading indicator -->
-<div id="loading-overlay">
-    <span class="spin">🔄</span> Loading bird sightings…
-</div>
-
-<!-- Map -->
-<div id="map"></div>
-
-<!-- Info Panel -->
-<div id="info-panel">
-    <h1>🦉 Bird Sightings Near<br>Koreshan State Park</h1>
-
-    <div class="legend-row">
-        <div class="legend-dot" style="background:#8B4513;"></div>
-        <span>Burrowing Owl</span>
-        <span class="legend-count" id="owl-count" style="color:#8B4513;">—</span>
-    </div>
-    <div class="legend-row">
-        <div class="legend-dot" style="background:#FF69B4;"></div>
-        <span>Roseate Spoonbill</span>
-        <span class="legend-count" id="spoonbill-count" style="color:#FF69B4;">—</span>
-    </div>
-    <div class="legend-row">
-        <div class="legend-dot" style="background:#FFD700; border-color:rgba(0,0,0,0.25);"></div>
-        <span>Limpkin</span>
-        <span class="legend-count" id="limpkin-count" style="color:#B8A000;">—</span>
-    </div>
-    <div class="legend-row">
-        <div class="legend-dot" style="background:#4169E1;"></div>
-        <span>Painted Bunting</span>
-        <span class="legend-count" id="bunting-count" style="color:#4169E1;">—</span>
-    </div>
-    <p class="legend-subtitle">locations · past 3 days · within 20 mi</p>
-
-    <hr class="divider">
-
-    <div class="ring-legend-title">Search Rings</div>
-    <div class="ring-row">
-        <div class="ring-sample" style="border-top:1.5px dashed #aaa;"></div>
-        <span>1 mile</span>
-    </div>
-    <div class="ring-row">
-        <div class="ring-sample" style="border-top:1.5px dashed #777;"></div>
-        <span>5 miles</span>
-    </div>
-    <div class="ring-row">
-        <div class="ring-sample" style="border-top:2px solid #444;"></div>
-        <span>10 miles</span>
-    </div>
-    <div class="ring-row">
-        <div class="ring-sample" style="border-top:2.5px dashed #1a1a1a;"></div>
-        <span>20 miles</span>
-    </div>
-
-    <hr class="divider">
-
-    <div id="status-section">
-        <div id="status-msg">Loading…</div>
-        <div id="updated-time"></div>
-    </div>
-</div>
-
-<script>
-// ── Configuration ────────────────────────────────────────────
-const CENTER        = [26.4317, -81.8187];   // Koreshan State Park, Estero FL
-const MILES_TO_M    = 1609.344;
-const FETCH_TIMEOUT = 10_000;                // 10 seconds
-
-const RINGS = [
-    { miles: 1,  color: '#aaaaaa', weight: 1.5, dash: '5 4'  },
-    { miles: 5,  color: '#777777', weight: 1.5, dash: '9 5'  },
-    { miles: 10, color: '#444444', weight: 2.0, dash: null    },
-    { miles: 20, color: '#1a1a1a', weight: 2.5, dash: '14 5' },
-];
-
-const FALLBACK_COLORS = {
-    burowl:  '#8B4513',
-    rosspo1: '#FF69B4',
-    limpki:  '#FFD700',
-    paibun:  '#4169E1',
-};
-
-// ── Init Map ─────────────────────────────────────────────────
-const map = L.map('map', { center: CENTER, zoom: 10 });
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">'
-        + 'OpenStreetMap</a> contributors | Bird data: '
-        + '<a href="https://ebird.org" target="_blank">eBird / Cornell Lab</a>',
-}).addTo(map);
-
-// ── Radius Rings ─────────────────────────────────────────────
-RINGS.forEach(r => {
-    const meters = r.miles * MILES_TO_M;
-
-    L.circle(CENTER, {
-        radius:      meters,
-        color:       r.color,
-        weight:      r.weight,
-        fillOpacity: 0,
-        dashArray:   r.dash,
-        interactive: false,
+    const map = L.map('map', { scrollWheelZoom: true }).setView(FALLBACK_CENTER, FALLBACK_ZOOM);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    const labelLat = CENTER[0] + (meters / 111_320);
-    L.marker([labelLat, CENTER[1]], {
-        interactive: false,
-        icon: L.divIcon({
-            className: '',
-            html: `<span style="
-                background:rgba(255,255,255,.88);
-                padding:1px 7px;
-                border-radius:9px;
-                font:bold 10px/18px sans-serif;
-                color:#555;
-                border:1px solid #ccc;
-                white-space:nowrap;
-            ">${r.miles} mi</span>`,
-            iconSize:   [40, 18],
-            iconAnchor: [20, 9],
-        }),
-    }).addTo(map);
-});
+    const speciesLayers = new Map();
+    let allObservations = [];
+    let speciesConfig = [];
 
-// ── Center-Point Marker ───────────────────────────────────────
-L.marker(CENTER, {
-    zIndexOffset: -200,
-    icon: L.divIcon({
-        className: '',
-        html: `<div style="
-            width:12px; height:12px;
-            background:#1a1a2e;
-            border-radius:50%;
-            border:2.5px solid #fff;
-            box-shadow:0 1px 5px rgba(0,0,0,.55);
-        "></div>`,
-        iconSize:   [12, 12],
-        iconAnchor: [6, 6],
-    }),
-}).bindTooltip(
-    '<b>Koreshan State Park</b><br>'
-    + '<span style="font-size:11px;color:#777;">Center of search area</span>',
-    { direction: 'top', offset: [0, -10] }
-).addTo(map);
-
-// ── Marker icon factory ───────────────────────────────────────
-function makeIcon(color) {
-    // Yellow needs a darker border so it shows up against the light map
-    const border = (color === '#FFD700')
-        ? 'rgba(0,0,0,0.30)'
-        : 'rgba(255,255,255,0.92)';
-
-    return L.divIcon({
-        className: '',
-        html: `<div style="
-            width:18px; height:18px;
-            background:${color};
-            border-radius:50%;
-            border:2.5px solid ${border};
-            box-shadow:0 2px 7px rgba(0,0,0,.38);
-            cursor:pointer;
-        "></div>`,
-        iconSize:   [18, 18],
-        iconAnchor: [9, 9],
-    });
-}
-
-// ── Formatters ────────────────────────────────────────────────
-function fmtDate(dtStr) {
-    const [datePart] = dtStr.split(' ');
-    const [y, mo, d] = datePart.split('-').map(Number);
-    return new Date(y, mo - 1, d).toLocaleDateString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-    });
-}
-
-function fmtCount(n) {
-    if (n == null) return 'present';
-    return n === 1 ? '1 bird' : `${n} birds`;
-}
-
-// ── Tooltip content ───────────────────────────────────────────
-function tooltipHTML(grp) {
-    const top = grp.obs[0];
-    return `
-        <div>
-            <b style="color:${grp.color};">${grp.name}</b><br>
-            <span style="color:#555;">📍 ${grp.locName}</span><br>
-            <span style="font-size:11px;color:#777;">
-                Latest: ${fmtDate(top.obsDt)} · ${fmtCount(top.howMany)}
-            </span><br>
-            <span style="font-size:11px;color:#bbb;">
-                ${grp.obs.length} checklist${grp.obs.length > 1 ? 's' : ''}
-            </span>
-        </div>`;
-}
-
-// ── Popup content ─────────────────────────────────────────────
-function popupHTML(grp) {
-    const rows = grp.obs.map(o => `
-        <div class="bp-cl-row">
-            <span class="bp-cl-date">${fmtDate(o.obsDt)}</span>
-            <span class="bp-cl-count">${fmtCount(o.howMany)}</span>
-            <span class="bp-cl-link">
-                <a href="https://ebird.org/checklist/${o.subId}"
-                   target="_blank" rel="noopener noreferrer">View ↗</a>
-            </span>
-        </div>`
-    ).join('');
-
-    const hotspot = (!grp.private && grp.locId)
-        ? `<div class="bp-hotspot">
-               🗺️ <a href="https://ebird.org/hotspot/${grp.locId}"
-                   target="_blank" rel="noopener noreferrer">
-                   View eBird Location Page ↗
-               </a>
-           </div>`
-        : '';
-
-    return `
-        <div class="bp-header" style="color:${grp.color};">${grp.name}</div>
-        <div class="bp-loc">📍 ${grp.locName}</div>
-        <div class="bp-cl-section-title">Checklists (${grp.obs.length})</div>
-        ${rows}
-        ${hotspot}`;
-}
-
-// ── Show error state in overlay ───────────────────────────────
-function showError(title, detail) {
-    const el = document.getElementById('loading-overlay');
-    el.innerHTML = `
-        <div style="
-            text-align:center;
-            background:#fff;
-            border-radius:12px;
-            padding:28px 32px;
-            box-shadow:0 4px 20px rgba(0,0,0,.15);
-            max-width:360px;
-        ">
-            <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
-            <div style="font-size:15px;font-weight:700;color:#c0392b;margin-bottom:8px;">
-                ${title}
-            </div>
-            <div style="font-size:12px;color:#666;margin-bottom:18px;line-height:1.6;">
-                ${detail}
-            </div>
-            <button onclick="location.reload()" style="
-                background:#2980b9;
-                color:#fff;
-                border:none;
-                border-radius:6px;
-                padding:8px 20px;
-                font-size:13px;
-                cursor:pointer;
-            ">↺ Retry</button>
-        </div>`;
-}
-
-// ── Fetch with timeout ────────────────────────────────────────
-function fetchWithTimeout(url, ms) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), ms);
-    return fetch(url, { signal: controller.signal })
-        .finally(() => clearTimeout(id));
-}
-
-// ── Load & Render ─────────────────────────────────────────────
-const markerLayer = L.layerGroup().addTo(map);
-
-async function loadData() {
-    const jsonUrl = `./data/observations.json?_=${Date.now()}`;
-    console.log('[BirdMap] Fetching:', jsonUrl);
-
-    try {
-        const res = await fetchWithTimeout(jsonUrl, FETCH_TIMEOUT);
-        console.log('[BirdMap] Response status:', res.status);
-
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status} — ${res.statusText}`);
-        }
-
-        const data = await res.json();
-        console.log('[BirdMap] Loaded observations:', data.observations?.length ?? 0);
-
-        markerLayer.clearLayers();
-
-        // Group observations by species + location
-        const groups = {};
-        (data.observations ?? []).forEach(obs => {
-            const key = `${obs.speciesCode}||${obs.locId}`;
-            if (!groups[key]) {
-                groups[key] = {
-                    speciesCode: obs.speciesCode,
-                    name:    obs.displayName ?? obs.comName,
-                    color:   obs.markerColor ?? FALLBACK_COLORS[obs.speciesCode] ?? '#666',
-                    locId:   obs.locId,
-                    locName: obs.locName,
-                    lat:     obs.lat,
-                    lng:     obs.lng,
-                    private: obs.locationPrivate,
-                    obs:     [],
-                };
-            }
-            groups[key].obs.push(obs);
-        });
-
-        // Sort newest → oldest within each group
-        Object.values(groups).forEach(g => {
-            g.obs.sort((a, b) =>
-                new Date(b.obsDt.replace(' ', 'T')) -
-                new Date(a.obsDt.replace(' ', 'T'))
-            );
-        });
-
-        let owlCount = 0, spoonCount = 0, limpkinCount = 0, buntingCount = 0;
-
-        Object.values(groups).forEach(grp => {
-            const m = L.marker([grp.lat, grp.lng], { icon: makeIcon(grp.color) });
-
-            m.bindTooltip(tooltipHTML(grp), {
-                direction: 'top',
-                offset:    [0, -12],
-                sticky:    false,
-            });
-
-            m.bindPopup(popupHTML(grp), {
-                maxWidth:  310,
-                maxHeight: 420,
-            });
-
-            markerLayer.addLayer(m);
-
-            if (grp.speciesCode === 'burowl')  owlCount++;
-            if (grp.speciesCode === 'rosspo1') spoonCount++;
-            if (grp.speciesCode === 'limpki')  limpkinCount++;
-            if (grp.speciesCode === 'paibun')  buntingCount++;
-        });
-
-        document.getElementById('owl-count').textContent      = owlCount;
-        document.getElementById('spoonbill-count').textContent = spoonCount;
-        document.getElementById('limpkin-count').textContent   = limpkinCount;
-        document.getElementById('bunting-count').textContent   = buntingCount;
-
-        const total = owlCount + spoonCount + limpkinCount + buntingCount;
-        document.getElementById('status-msg').textContent =
-            total > 0
-                ? `${total} location${total > 1 ? 's' : ''} with sightings`
-                : 'No sightings found in the past 3 days';
-
-        if (data.lastUpdated && data.lastUpdated !== 'never') {
-            const d = new Date(data.lastUpdated);
-            document.getElementById('updated-time').textContent =
-                'Updated: ' + d.toLocaleString('en-US', {
-                    timeZone:     'America/New_York',
-                    month:        'short',
-                    day:          'numeric',
-                    hour:         'numeric',
-                    minute:       '2-digit',
-                    timeZoneName: 'short',
-                });
-        } else {
-            document.getElementById('updated-time').textContent =
-                'Run the GitHub Action to populate data';
-        }
-
-        // Success — hide overlay
-        document.getElementById('loading-overlay').style.display = 'none';
-
-    } catch (err) {
-        console.error('[BirdMap] Error loading data:', err);
-
-        if (err.name === 'AbortError') {
-            showError(
-                'Request timed out',
-                'The data file took too long to load.<br>'
-                + 'GitHub Pages may still be deploying — please wait a minute and retry.'
-            );
-        } else if (err.message.includes('404') || err.message.includes('HTTP 4')) {
-            showError(
-                'Data file not found',
-                `Could not load <code>data/observations.json</code>.<br><br>`
-                + `Make sure the file is committed to the repo and GitHub Pages `
-                + `has finished deploying.<br><br>`
-                + `<a href="https://github.com/goodbirds-org/ksp2026/blob/main/data/observations.json" `
-                + `target="_blank" style="color:#2980b9;">Check if file exists ↗</a>`
-            );
-        } else {
-            showError(
-                'Could not load bird data',
-                `${err.message}<br><br>`
-                + `<a href="https://github.com/goodbirds-org/ksp2026/actions" `
-                + `target="_blank" style="color:#2980b9;">Check Actions status ↗</a>`
-            );
-        }
-
-        document.getElementById('status-msg').textContent   = '⚠️ Error loading data';
-        document.getElementById('updated-time').textContent = 'See error on map';
+    function formatDate(value) {
+      if (!value) return 'unknown update time';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     }
-}
 
-loadData();
-</script>
+    function checklistUrl(obs) {
+      if (!obs.subId) return '';
+      return `https://ebird.org/checklist/${obs.subId}`;
+    }
+
+    function locationKey(obs) {
+      if (obs.locId) return obs.locId;
+      const lat = Number(obs.lat).toFixed(5);
+      const lng = Number(obs.lng).toFixed(5);
+      return `${lat},${lng}`;
+    }
+
+    function speciesCode(obs) {
+      return obs.speciesCode || obs.code || obs.comName || obs.displayName;
+    }
+
+    function visibleObservations() {
+      return allObservations.filter(obs => {
+        const layer = speciesLayers.get(speciesCode(obs));
+        return layer && map.hasLayer(layer);
+      });
+    }
+
+    function updateVisibleLocationTotal() {
+      const locations = new Set(visibleObservations().map(locationKey));
+      const label = locations.size === 1 ? 'location' : 'locations';
+      document.getElementById('location-total').textContent = `${locations.size} ${label} with sightings`;
+    }
+
+    function makePopup(obs) {
+      const count = Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : null;
+      const url = checklistUrl(obs);
+      const checklist = url ? `<div class="gb-popup-row"><a href="${url}" target="_blank" rel="noopener">Open eBird checklist</a></div>` : '';
+      return `
+        <div class="gb-popup-title">${obs.displayName || obs.comName || 'Target species'}</div>
+        <div class="gb-popup-row">${obs.locName || 'Unknown location'}</div>
+        <div class="gb-popup-row">${obs.obsDt || ''}${count !== null ? `, ${count} bird${count === 1 ? '' : 's'}` : ''}</div>
+        ${checklist}
+      `;
+    }
+
+    function renderSpeciesList() {
+      const container = document.getElementById('species-list');
+      container.innerHTML = '';
+      speciesConfig.forEach(species => {
+        const observations = allObservations.filter(obs => speciesCode(obs) === species.code || obs.displayName === species.name || obs.comName === species.name);
+        const birdCount = observations.reduce((sum, obs) => sum + (Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : 1), 0);
+        const sightingCount = observations.length;
+        const row = document.createElement('label');
+        row.className = 'gb-species-row';
+        row.dataset.species = species.code;
+        row.innerHTML = `
+          <input type="checkbox" checked aria-label="Show ${species.name}">
+          <span class="gb-swatch" style="background:${species.color || '#666'}"></span>
+          <span><span class="gb-species-name">${species.name}</span><span class="gb-counts">${birdCount} bird${birdCount === 1 ? '' : 's'}, ${sightingCount} sighting${sightingCount === 1 ? '' : 's'}</span></span>
+        `;
+        row.querySelector('input').addEventListener('change', event => {
+          const layer = speciesLayers.get(species.code);
+          if (!layer) return;
+          if (event.target.checked) {
+            layer.addTo(map);
+            row.classList.remove('gb-row-off');
+          } else {
+            map.removeLayer(layer);
+            row.classList.add('gb-row-off');
+          }
+          updateVisibleLocationTotal();
+        });
+        container.appendChild(row);
+      });
+    }
+
+    function drawSearchRings(center, distKm) {
+      const ringMiles = [1, 5, 10, 20].filter(mi => mi * 1.609344 <= distKm + 0.1);
+      ringMiles.forEach(mi => {
+        L.circle(center, {
+          radius: mi * 1609.344,
+          color: '#64748b',
+          weight: 1,
+          opacity: 0.35,
+          fillOpacity: 0
+        }).addTo(map);
+      });
+    }
+
+    fetch(DATA_URL)
+      .then(response => {
+        if (!response.ok) throw new Error(`Could not load ${DATA_URL}`);
+        return response.json();
+      })
+      .then(data => {
+        speciesConfig = data.species || [];
+        allObservations = data.observations || [];
+        const center = [Number(data.centerLat) || FALLBACK_CENTER[0], Number(data.centerLng) || FALLBACK_CENTER[1]];
+        map.setView(center, FALLBACK_ZOOM);
+        drawSearchRings(center, Number(data.distKm) || 0);
+        speciesConfig.forEach(species => {
+          const layer = L.layerGroup().addTo(map);
+          speciesLayers.set(species.code, layer);
+        });
+        allObservations.forEach(obs => {
+          const code = speciesCode(obs);
+          const species = speciesConfig.find(item => item.code === code || item.name === obs.displayName || item.name === obs.comName) || {};
+          const layer = speciesLayers.get(species.code || code);
+          if (!layer || obs.lat === undefined || obs.lng === undefined) return;
+          L.circleMarker([Number(obs.lat), Number(obs.lng)], {
+            radius: 7,
+            color: '#111827',
+            weight: 1,
+            fillColor: obs.markerColor || species.color || '#666666',
+            fillOpacity: 0.9
+          }).bindPopup(makePopup(obs)).addTo(layer);
+        });
+        document.getElementById('updated-meta').textContent = `Updated ${formatDate(data.lastUpdated)}. Showing sightings from the last ${data.backDays || 3} days.`;
+        renderSpeciesList();
+        updateVisibleLocationTotal();
+        const bounds = [];
+        allObservations.forEach(obs => {
+          if (obs.lat !== undefined && obs.lng !== undefined) bounds.push([Number(obs.lat), Number(obs.lng)]);
+        });
+        if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+      })
+      .catch(error => {
+        document.getElementById('updated-meta').textContent = error.message;
+      });
+  </script>
 </body>
 </html>
