@@ -22,7 +22,7 @@ GA_SNIPPET = """
 </script>
 """
 
-VERSION = "GOODBIRDS_TARGET_SPECIES_V7_FOLIUM_RENDER_FIX_2026-05-11"
+VERSION = "GOODBIRDS_TARGET_SPECIES_V8_RADIUS_RINGS_2026-05-11"
 
 
 def esc(s):
@@ -107,24 +107,57 @@ def icon_html(color):
 
 
 def add_rings(m, center, dist_km):
+    """Add visible search-radius rings to the map only, not the legend."""
     try:
         dist = float(dist_km)
     except Exception:
         dist = 0
-    for mi in [1, 5, 10, 20]:
-        if mi * 1.609344 <= dist + 0.1:
-            folium.Circle(
-                location=center,
-                radius=mi * 1609.344,
-                color="#64748b",
-                weight=1,
-                opacity=0.25,
-                fill=False,
-                interactive=False,
-            ).add_to(m)
+
+    # Center marker, matching the location notable map style.
+    folium.CircleMarker(
+        location=center,
+        radius=4,
+        color="#2c7fb8",
+        fill=True,
+        fill_opacity=1,
+        tooltip="Search center",
+        interactive=False,
+    ).add_to(m)
+
+    ring_miles = [1, 5, 10, 20]
+    visible = [mi for mi in ring_miles if mi * 1.609344 <= dist + 0.1]
+    if not visible:
+        return
+
+    for mi in visible:
+        is_outer = mi == visible[-1]
+        color = "#08519c" if is_outer else "#475569"
+        folium.Circle(
+            location=center,
+            radius=mi * 1609.344,
+            color=color,
+            weight=2 if is_outer else 1.5,
+            opacity=0.75 if is_outer else 0.55,
+            fill=False,
+            dash_array=None if is_outer else "6,8",
+            interactive=False,
+        ).add_to(m)
+
+        # Put small labels north of the center. They are map annotations, not legend entries.
+        label_lat = center[0] + (mi * 1.609344 / 111.0)
+        label_html = (
+            f"<div style='font:600 11px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;"
+            f"color:{color};background:rgba(255,255,255,.82);border:1px solid rgba(71,85,105,.35);"
+            f"border-radius:999px;padding:2px 5px;white-space:nowrap'>{mi} mi</div>"
+        )
+        folium.Marker(
+            location=[label_lat, center[1]],
+            icon=folium.DivIcon(html=label_html, icon_size=(44, 16), icon_anchor=(22, 8)),
+            interactive=False,
+        ).add_to(m)
 
 
-def build_legend(title, updated, back_days, species_rows, total_locations, layer_names):
+def build_legend(title, updated, back_days, species_rows, total_locations, layer_names, species_locations):
     rows_html = []
     for row in species_rows:
         code = esc(row["code"])
@@ -140,6 +173,7 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
           </label>
         """)
     layer_json = json.dumps(layer_names)
+    species_locations_json = json.dumps(species_locations)
     total_text = f"{total_locations} location{'s' if total_locations != 1 else ''} with sightings"
     return f"""
     <style>
@@ -170,16 +204,23 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
     <script>
       (function() {{
         var layerNames = {layer_json};
+        var speciesLocations = {species_locations_json};
         function getLayer(code) {{
           var name = layerNames[code];
           if (!name) return null;
           return window[name] || null;
         }}
         function updateTotal() {{
-          var total = 0;
+          var locations = new Set();
           document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
-            if (cb.checked) total += Number(cb.getAttribute('data-locations') || 0);
+            if (!cb.checked) return;
+            var code = cb.getAttribute('data-layer');
+            (speciesLocations[code] || []).forEach(function(loc) {{ locations.add(loc); }});
           }});
+          var count = locations.size;
+          var label = count === 1 ? 'location' : 'locations';
+          var totalEl = document.getElementById('location-total');
+          if (totalEl) totalEl.textContent = count + ' ' + label + ' with sightings';
         }}
         document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
           cb.addEventListener('change', function() {{
@@ -188,6 +229,7 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
             if (!layer || !window.MAP_NAME_PLACEHOLDER) return;
             if (cb.checked) {{ layer.addTo(window.MAP_NAME_PLACEHOLDER); row.classList.remove('gb-row-off'); }}
             else {{ window.MAP_NAME_PLACEHOLDER.removeLayer(layer); row.classList.add('gb-row-off'); }}
+            updateTotal();
           }});
         }});
       }})();
@@ -218,6 +260,7 @@ def main():
 
     species_rows = []
     layer_names = OrderedDict()
+    species_locations = OrderedDict()
     bounds = []
     total_locations = set()
 
@@ -226,13 +269,13 @@ def main():
         layer = folium.FeatureGroup(name=sp.get("name") or sp.get("code") or "Target species", show=True)
         layer.add_to(m)
         layer_names[str(sp.get("code") or sp.get("name"))] = layer.get_name()
-        species_locations = set()
+        species_locations_for_row = set()
         for obs in sp_obs:
             try:
                 lat = float(obs.get("lat")); lng = float(obs.get("lng"))
             except Exception:
                 continue
-            species_locations.add(loc_key(obs))
+            species_locations_for_row.add(loc_key(obs))
             total_locations.add(loc_key(obs))
             bounds.append([lat, lng])
             folium.Marker(
@@ -245,13 +288,14 @@ def main():
                     icon_anchor=(7, 7),
                 ),
             ).add_to(layer)
+        species_locations[str(sp.get("code") or sp.get("name"))] = sorted(species_locations) if False else sorted(species_locations_for_row)
         species_rows.append({
             "code": str(sp.get("code") or sp.get("name")),
             "name": sp.get("name") or sp.get("code") or "Target species",
             "color": sp.get("color") or "#666666",
             "bird_count": count_birds(sp_obs),
             "sighting_count": len(sp_obs),
-            "location_count": len(species_locations),
+            "location_count": len(species_locations_for_row),
         })
 
     if bounds:
@@ -259,7 +303,7 @@ def main():
 
     folium.LayerControl(collapsed=True).add_to(m)
     map_name = m.get_name()
-    legend = build_legend(args.title, fmt_updated(data.get("lastUpdated")), data.get("backDays") or "", species_rows, len(total_locations), layer_names)
+    legend = build_legend(args.title, fmt_updated(data.get("lastUpdated")), data.get("backDays") or "", species_rows, len(total_locations), layer_names, species_locations)
     legend = legend.replace("MAP_NAME_PLACEHOLDER", map_name)
     m.get_root().html.add_child(folium.Element(legend))
 
