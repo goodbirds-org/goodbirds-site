@@ -1,273 +1,280 @@
 #!/usr/bin/env python3
-"""Build a self-contained target species map page from observations.json."""
-
+"""Build a Folium target-species map page from docs/targets/<slug>/data/observations.json."""
 import argparse
-import html
 import json
+import os
+from collections import OrderedDict
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import folium
+from folium.plugins import Fullscreen, LocateControl, MousePosition
+
+GA_SNIPPET = """
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NYEBPC2JEZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-NYEBPC2JEZ');
+</script>
+"""
+
+VERSION = "GOODBIRDS_TARGET_SPECIES_V7_FOLIUM_RENDER_FIX_2026-05-11"
 
 
-def esc(value):
-    return html.escape(str(value or ""), quote=True)
+def esc(s):
+    return (str(s or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#039;"))
 
 
-def build_html(title, fallback_lat, fallback_lng, fallback_zoom, data):
-    data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    safe_title = esc(title)
-    return f'''<!doctype html>
-<html lang="en">
-<head>
-  <!-- GOODBIRDS_TARGET_SPECIES_V6_EMBEDDED_DATA_RENDER_FIX_2026-05-11 -->
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{safe_title} | Goodbirds</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ9omV9oDZDn8jA3asSO7vpBv+4jrA=" crossorigin="">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <style>
-    html, body {{ height: 100%; margin: 0; padding: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2933; }}
-    #map {{ position: fixed; inset: 0; height: 100vh; width: 100vw; min-height: 360px; background: #eef3f6; }}
-    .leaflet-container {{ background: #eef3f6; }}
-    .leaflet-tile {{ max-width: none !important; }}
-    .gb-panel {{ position: absolute; z-index: 1000; left: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.95); border-radius: 12px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 11px; box-sizing: border-box; }}
-    .gb-panel h1 {{ margin: 0 0 4px; font-size: 16px; line-height: 1.2; }}
-    .gb-meta {{ margin: 0 0 10px; color: #52616b; font-size: 10.5px; line-height: 1.35; }}
-    .gb-total {{ font-weight: 700; margin: 8px 0 10px; font-size: 12px; }}
-    .gb-species-list {{ display: grid; gap: 5px; margin: 0 0 9px; }}
-    .gb-species-row {{ display: grid; grid-template-columns: 17px 13px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
-    .gb-species-row input {{ margin: 2px 0 0 0; }}
-    .gb-swatch {{ width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; border: 1px solid rgba(0,0,0,.35); }}
-    .gb-species-name {{ font-weight: 700; font-size: 12px; }}
-    .gb-counts {{ display: block; margin-top: 1px; color: #52616b; font-size: 10.5px; }}
-    .gb-row-off {{ opacity: .48; }}
-    .gb-footer {{ border-top: 1px solid #e3e8ef; padding-top: 8px; font-size: 10.5px; }}
-    .gb-footer a {{ color: #0f766e; font-weight: 700; text-decoration: none; }}
-    .gb-footer a:hover {{ text-decoration: underline; }}
-    .gb-popup-title {{ font-weight: 700; margin-bottom: 4px; }}
-    .gb-popup-row {{ margin: 2px 0; }}
-    .gb-error {{ color: #9f1239; font-weight: 700; }}
-    @media (max-width: 640px) {{ .gb-panel {{ left: 10px; right: 10px; top: 10px; width: auto; max-height: 44vh; }} }}
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <aside class="gb-panel" aria-label="Target species legend">
-    <h1>{safe_title}</h1>
-    <p class="gb-meta" id="updated-meta">Loading recent target species sightings...</p>
-    <div class="gb-total" id="location-total"></div>
-    <div class="gb-species-list" id="species-list"></div>
-    <div class="gb-footer"><a href="../">All target species maps</a></div>
-  </aside>
-  <script>
-    const TARGET_DATA = {data_json};
-    const FALLBACK_CENTER = [{float(fallback_lat):.6f}, {float(fallback_lng):.6f}];
-    const FALLBACK_ZOOM = {int(fallback_zoom)};
+def fmt_updated(value):
+    if not value:
+        return "unknown update time"
+    try:
+        text = value.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime("%b %d, %Y %I:%M %p %Z")
+    except Exception:
+        return str(value)
 
-    const map = L.map('map', {{ scrollWheelZoom: true, preferCanvas: true }}).setView(FALLBACK_CENTER, FALLBACK_ZOOM);
-    L.tileLayer('https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
-      maxZoom: 20,
-      subdomains: 'abcd',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      crossOrigin: true
-    }}).addTo(map);
 
-    window.addEventListener('load', () => {{
-      setTimeout(() => map.invalidateSize(), 100);
-      setTimeout(() => map.invalidateSize(), 500);
-    }});
+def loc_key(obs):
+    if obs.get("locId"):
+        return str(obs.get("locId"))
+    try:
+        return f"{float(obs.get('lat')):.5f},{float(obs.get('lng')):.5f}"
+    except Exception:
+        return obs.get("locName") or "unknown"
 
-    const speciesLayers = new Map();
-    let allObservations = [];
-    let speciesConfig = [];
 
-    function normalizeKey(value) {{
-      return String(value || '').trim().toLowerCase();
-    }}
+def count_birds(obs_list):
+    total = 0
+    for obs in obs_list:
+        try:
+            val = int(float(obs.get("howMany")))
+        except Exception:
+            val = 1
+        total += max(1, val)
+    return total
 
-    function formatDate(value) {{
-      if (!value) return 'unknown update time';
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return value;
-      return date.toLocaleString([], {{ year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }});
-    }}
 
-    function checklistUrl(obs) {{
-      if (!obs.subId) return '';
-      return `https://ebird.org/checklist/${{obs.subId}}`;
-    }}
+def species_match(obs, species):
+    vals = {
+        str(obs.get("speciesCode") or "").strip().lower(),
+        str(obs.get("code") or "").strip().lower(),
+        str(obs.get("displayName") or "").strip().lower(),
+        str(obs.get("comName") or "").strip().lower(),
+    }
+    return str(species.get("code") or "").strip().lower() in vals or str(species.get("name") or "").strip().lower() in vals
 
-    function locationKey(obs) {{
-      if (obs.locId) return obs.locId;
-      const lat = Number(obs.lat);
-      const lng = Number(obs.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return obs.locName || 'unknown';
-      return `${{lat.toFixed(5)}},${{lng.toFixed(5)}}`;
-    }}
 
-    function findSpeciesForObservation(obs) {{
-      const code = normalizeKey(obs.speciesCode || obs.code);
-      const displayName = normalizeKey(obs.displayName);
-      const commonName = normalizeKey(obs.comName);
-      return speciesConfig.find(item =>
-        normalizeKey(item.code) === code ||
-        normalizeKey(item.name) === displayName ||
-        normalizeKey(item.name) === commonName
-      ) || null;
-    }}
+def make_popup(obs):
+    name = esc(obs.get("displayName") or obs.get("comName") or "Target species")
+    loc = esc(obs.get("locName") or "Unknown location")
+    dt = esc(obs.get("obsDt") or "")
+    count = obs.get("howMany")
+    count_text = ""
+    try:
+        c = int(float(count))
+        count_text = f", {c} bird" + ("" if c == 1 else "s")
+    except Exception:
+        pass
+    cid = obs.get("subId") or ""
+    checklist = f"<div><a href='https://ebird.org/checklist/{esc(cid)}' target='_blank' rel='noopener'>Open eBird checklist</a></div>" if cid else ""
+    return folium.Popup(
+        f"<div style='font-size:13px;line-height:1.35'>"
+        f"<div style='font-weight:700;margin-bottom:4px'>{name}</div>"
+        f"<div>{loc}</div>"
+        f"<div>{dt}{count_text}</div>"
+        f"{checklist}</div>",
+        max_width=340,
+    )
 
-    function layerKeyForObservation(obs) {{
-      const species = findSpeciesForObservation(obs);
-      return species ? species.code : (obs.speciesCode || obs.code || obs.displayName || obs.comName || 'unknown');
-    }}
 
-    function visibleObservations() {{
-      return allObservations.filter(obs => {{
-        const layer = speciesLayers.get(layerKeyForObservation(obs));
-        return layer && map.hasLayer(layer);
-      }});
-    }}
+def icon_html(color):
+    color = esc(color or "#666666")
+    return (
+        f"<div style='width:14px;height:14px;border-radius:50%;"
+        f"background:{color};border:1.5px solid #111827;box-shadow:0 1px 3px rgba(0,0,0,.35);'></div>"
+    )
 
-    function updateVisibleLocationTotal() {{
-      const locations = new Set(visibleObservations().map(locationKey));
-      const label = locations.size === 1 ? 'location' : 'locations';
-      document.getElementById('location-total').textContent = `${{locations.size}} ${{label}} with sightings`;
-    }}
 
-    function makePopup(obs) {{
-      const count = Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : null;
-      const url = checklistUrl(obs);
-      const checklist = url ? `<div class="gb-popup-row"><a href="${{url}}" target="_blank" rel="noopener">Open eBird checklist</a></div>` : '';
-      return `
-        <div class="gb-popup-title">${{obs.displayName || obs.comName || 'Target species'}}</div>
-        <div class="gb-popup-row">${{obs.locName || 'Unknown location'}}</div>
-        <div class="gb-popup-row">${{obs.obsDt || ''}}${{count !== null ? `, ${{count}} bird${{count === 1 ? '' : 's'}}` : ''}}</div>
-        ${{checklist}}
-      `;
-    }}
+def add_rings(m, center, dist_km):
+    try:
+        dist = float(dist_km)
+    except Exception:
+        dist = 0
+    for mi in [1, 5, 10, 20]:
+        if mi * 1.609344 <= dist + 0.1:
+            folium.Circle(
+                location=center,
+                radius=mi * 1609.344,
+                color="#64748b",
+                weight=1,
+                opacity=0.25,
+                fill=False,
+                interactive=False,
+            ).add_to(m)
 
-    function renderSpeciesList() {{
-      const container = document.getElementById('species-list');
-      container.innerHTML = '';
-      speciesConfig.forEach(species => {{
-        const observations = allObservations.filter(obs => layerKeyForObservation(obs) === species.code);
-        const birdCount = observations.reduce((sum, obs) => sum + (Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : 1), 0);
-        const sightingCount = observations.length;
-        const row = document.createElement('label');
-        row.className = 'gb-species-row';
-        row.dataset.species = species.code;
-        row.innerHTML = `
-          <input type="checkbox" checked aria-label="Show ${{species.name}}">
-          <span class="gb-swatch" style="background:${{species.color || '#666'}}"></span>
-          <span><span class="gb-species-name">${{species.name}}</span><span class="gb-counts">${{birdCount}} bird${{birdCount === 1 ? '' : 's'}}, ${{sightingCount}} sighting${{sightingCount === 1 ? '' : 's'}}</span></span>
-        `;
-        row.querySelector('input').addEventListener('change', event => {{
-          const layer = speciesLayers.get(species.code);
-          if (!layer) return;
-          if (event.target.checked) {{
-            layer.addTo(map);
-            row.classList.remove('gb-row-off');
-          }} else {{
-            map.removeLayer(layer);
-            row.classList.add('gb-row-off');
-          }}
-          updateVisibleLocationTotal();
+
+def build_legend(title, updated, back_days, species_rows, total_locations, layer_names):
+    rows_html = []
+    for row in species_rows:
+        code = esc(row["code"])
+        name = esc(row["name"])
+        color = esc(row["color"])
+        bird_count = int(row["bird_count"])
+        sighting_count = int(row["sighting_count"])
+        rows_html.append(f"""
+          <label class="gb-species-row" data-species="{code}">
+            <input type="checkbox" checked data-layer="{code}" aria-label="Show {name}">
+            <span class="gb-swatch" style="background:{color}"></span>
+            <span><span class="gb-species-name">{name}</span><span class="gb-counts">{bird_count} bird{'s' if bird_count != 1 else ''}, {sighting_count} sighting{'s' if sighting_count != 1 else ''}</span></span>
+          </label>
+        """)
+    layer_json = json.dumps(layer_names)
+    total_text = f"{total_locations} location{'s' if total_locations != 1 else ''} with sightings"
+    return f"""
+    <style>
+      .gb-panel {{ position: fixed; z-index: 9999; left: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.95); border-radius: 12px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 11px; box-sizing: border-box; font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#1f2933; }}
+      .gb-panel h1 {{ margin: 0 0 4px; font-size: 16px; line-height: 1.2; }}
+      .gb-meta {{ margin: 0 0 10px; color: #52616b; font-size: 10.5px; line-height: 1.35; }}
+      .gb-total {{ font-weight: 700; margin: 8px 0 10px; font-size: 12px; }}
+      .gb-species-list {{ display: grid; gap: 5px; margin: 0 0 9px; }}
+      .gb-species-row {{ display: grid; grid-template-columns: 17px 13px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
+      .gb-species-row input {{ margin: 2px 0 0 0; }}
+      .gb-swatch {{ width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; border: 1px solid rgba(0,0,0,.35); }}
+      .gb-species-name {{ font-weight: 700; font-size: 12px; }}
+      .gb-counts {{ display: block; margin-top: 1px; color: #52616b; font-size: 10.5px; }}
+      .gb-row-off {{ opacity: .48; }}
+      .gb-footer {{ border-top: 1px solid #e3e8ef; padding-top: 8px; font-size: 10.5px; }}
+      .gb-footer a {{ color: #0f766e; font-weight: 700; text-decoration: none; }}
+      .gb-footer a:hover {{ text-decoration: underline; }}
+      .leaflet-control-layers {{ display: none; }}
+      @media (max-width: 640px) {{ .gb-panel {{ left: 10px; right: 10px; top: 10px; width: auto; max-height: 44vh; }} }}
+    </style>
+    <aside class="gb-panel" aria-label="Target species legend">
+      <h1>{esc(title)}</h1>
+      <p class="gb-meta">Updated {esc(updated)}. Showing sightings from the last {esc(back_days)} days.</p>
+      <div class="gb-total" id="location-total">{esc(total_text)}</div>
+      <div class="gb-species-list">{''.join(rows_html)}</div>
+      <div class="gb-footer"><a href="../">All target species maps</a></div>
+    </aside>
+    <script>
+      (function() {{
+        var layerNames = {layer_json};
+        function getLayer(code) {{
+          var name = layerNames[code];
+          if (!name) return null;
+          return window[name] || null;
+        }}
+        function updateTotal() {{
+          var total = 0;
+          document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
+            if (cb.checked) total += Number(cb.getAttribute('data-locations') || 0);
+          }});
+        }}
+        document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
+          cb.addEventListener('change', function() {{
+            var row = cb.closest('.gb-species-row');
+            var layer = getLayer(cb.getAttribute('data-layer'));
+            if (!layer || !window.MAP_NAME_PLACEHOLDER) return;
+            if (cb.checked) {{ layer.addTo(window.MAP_NAME_PLACEHOLDER); row.classList.remove('gb-row-off'); }}
+            else {{ window.MAP_NAME_PLACEHOLDER.removeLayer(layer); row.classList.add('gb-row-off'); }}
+          }});
         }});
-        container.appendChild(row);
-      }});
-    }}
-
-    function drawSearchRings(center, distKm) {{
-      const ringMiles = [1, 5, 10, 20].filter(mi => mi * 1.609344 <= distKm + 0.1);
-      ringMiles.forEach(mi => {{
-        L.circle(center, {{
-          radius: mi * 1609.344,
-          color: '#64748b',
-          weight: 1,
-          opacity: 0.25,
-          fillOpacity: 0,
-          interactive: false
-        }}).addTo(map);
-      }});
-    }}
-
-    function drawMap(data) {{
-      speciesConfig = Array.isArray(data.species) ? data.species : [];
-      allObservations = Array.isArray(data.observations) ? data.observations : [];
-      const center = [Number(data.centerLat) || FALLBACK_CENTER[0], Number(data.centerLng) || FALLBACK_CENTER[1]];
-      map.setView(center, FALLBACK_ZOOM);
-      drawSearchRings(center, Number(data.distKm) || 0);
-
-      speciesConfig.forEach(species => {{
-        speciesLayers.set(species.code, L.layerGroup().addTo(map));
-      }});
-
-      let markerCount = 0;
-      allObservations.forEach(obs => {{
-        const species = findSpeciesForObservation(obs);
-        const layer = speciesLayers.get(layerKeyForObservation(obs));
-        const lat = Number(obs.lat);
-        const lng = Number(obs.lng);
-        if (!layer || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        markerCount += 1;
-        L.circleMarker([lat, lng], {{
-          radius: 7,
-          color: '#111827',
-          weight: 1,
-          fillColor: obs.markerColor || (species && species.color) || '#666666',
-          fillOpacity: 0.95,
-          pane: 'markerPane'
-        }}).bindPopup(makePopup(obs)).addTo(layer);
-      }});
-
-      document.getElementById('updated-meta').textContent = `Updated ${{formatDate(data.lastUpdated)}}. Showing sightings from the last ${{data.backDays || 3}} days.`;
-      renderSpeciesList();
-      updateVisibleLocationTotal();
-
-      const bounds = [];
-      allObservations.forEach(obs => {{
-        const lat = Number(obs.lat);
-        const lng = Number(obs.lng);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) bounds.push([lat, lng]);
-      }});
-      if (bounds.length) {{
-        map.fitBounds(bounds, {{ padding: [45, 45], maxZoom: 12 }});
-      }}
-      setTimeout(() => map.invalidateSize(), 100);
-
-      if (!markerCount && allObservations.length) {{
-        document.getElementById('updated-meta').innerHTML = '<span class="gb-error">Data loaded, but no valid marker coordinates matched the species list.</span>';
-      }}
-    }}
-
-    try {{
-      drawMap(TARGET_DATA || {{ species: [], observations: [] }});
-    }} catch (error) {{
-      document.getElementById('updated-meta').innerHTML = `<span class="gb-error">Map error: ${{error.message}}</span>`;
-      console.error(error);
-    }}
-  </script>
-</body>
-</html>
-'''
+      }})();
+    </script>
+    """
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data', required=True)
-    parser.add_argument('--out', required=True)
-    parser.add_argument('--title', required=True)
-    parser.add_argument('--fallback-lat', required=True, type=float)
-    parser.add_argument('--fallback-lng', required=True, type=float)
-    parser.add_argument('--fallback-zoom', default=10, type=int)
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", required=True, help="Path to observations.json")
+    ap.add_argument("--out", required=True, help="Output HTML path")
+    ap.add_argument("--title", required=True, help="Map title")
+    ap.add_argument("--zoom", default="10")
+    args = ap.parse_args()
 
     data_path = Path(args.data)
     out_path = Path(args.out)
-    data = json.loads(data_path.read_text(encoding='utf-8'))
-    html_text = build_html(args.title, args.fallback_lat, args.fallback_lng, args.fallback_zoom, data)
+    data = json.loads(data_path.read_text(encoding="utf-8"))
+    species = data.get("species") or []
+    observations = data.get("observations") or []
+    center = [float(data.get("centerLat") or 0), float(data.get("centerLng") or 0)]
+
+    m = folium.Map(location=center, zoom_start=int(args.zoom), control_scale=True)
+    Fullscreen().add_to(m)
+    LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
+    MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
+    add_rings(m, center, data.get("distKm") or 0)
+
+    species_rows = []
+    layer_names = OrderedDict()
+    bounds = []
+    total_locations = set()
+
+    for sp in species:
+        sp_obs = [o for o in observations if species_match(o, sp)]
+        layer = folium.FeatureGroup(name=sp.get("name") or sp.get("code") or "Target species", show=True)
+        layer.add_to(m)
+        layer_names[str(sp.get("code") or sp.get("name"))] = layer.get_name()
+        species_locations = set()
+        for obs in sp_obs:
+            try:
+                lat = float(obs.get("lat")); lng = float(obs.get("lng"))
+            except Exception:
+                continue
+            species_locations.add(loc_key(obs))
+            total_locations.add(loc_key(obs))
+            bounds.append([lat, lng])
+            folium.Marker(
+                location=[lat, lng],
+                tooltip=obs.get("displayName") or obs.get("comName") or sp.get("name"),
+                popup=make_popup(obs),
+                icon=folium.DivIcon(
+                    html=icon_html(obs.get("markerColor") or sp.get("color") or "#666666"),
+                    icon_size=(14, 14),
+                    icon_anchor=(7, 7),
+                ),
+            ).add_to(layer)
+        species_rows.append({
+            "code": str(sp.get("code") or sp.get("name")),
+            "name": sp.get("name") or sp.get("code") or "Target species",
+            "color": sp.get("color") or "#666666",
+            "bird_count": count_birds(sp_obs),
+            "sighting_count": len(sp_obs),
+            "location_count": len(species_locations),
+        })
+
+    if bounds:
+        m.fit_bounds(bounds, padding=(45, 45), max_zoom=12)
+
+    folium.LayerControl(collapsed=True).add_to(m)
+    map_name = m.get_name()
+    legend = build_legend(args.title, fmt_updated(data.get("lastUpdated")), data.get("backDays") or "", species_rows, len(total_locations), layer_names)
+    legend = legend.replace("MAP_NAME_PLACEHOLDER", map_name)
+    m.get_root().html.add_child(folium.Element(legend))
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html_text, encoding='utf-8')
-    print(f'Wrote {out_path} with {len(data.get("observations", []))} observations embedded')
+    m.save(str(out_path))
+
+    html = out_path.read_text(encoding="utf-8")
+    html = html.replace("<head>", f"<head>\n  <!-- {VERSION} -->", 1)
+    title_tag = f"<title>{esc(args.title)} | Goodbirds</title>"
+    if "<title>" not in html:
+        html = html.replace("</head>", f"  {title_tag}\n</head>", 1)
+    html = html.replace("</body>", GA_SNIPPET + "\n</body>", 1)
+    out_path.write_text(html, encoding="utf-8")
+    print(f"Wrote {out_path} with {len(observations)} observations")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
