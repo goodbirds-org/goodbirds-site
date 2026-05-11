@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Build a self-contained target species map page from observations.json."""
+
+import argparse
+import html
+import json
+from pathlib import Path
+
+
+def esc(value):
+    return html.escape(str(value or ""), quote=True)
+
+
+def build_html(title, fallback_lat, fallback_lng, fallback_zoom, data):
+    data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    safe_title = esc(title)
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+  <!-- GOODBIRDS_TARGET_SPECIES_V6_EMBEDDED_DATA_RENDER_FIX_2026-05-11 -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{safe_title} | Goodbirds</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ9omV9oDZDn8jA3asSO7vpBv+4jrA=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    html, body {{ height: 100%; margin: 0; padding: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2933; }}
+    #map {{ position: fixed; inset: 0; height: 100vh; width: 100vw; min-height: 360px; background: #eef3f6; }}
+    .leaflet-container {{ background: #eef3f6; }}
+    .leaflet-tile {{ max-width: none !important; }}
+    .gb-panel {{ position: absolute; z-index: 1000; left: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.95); border-radius: 12px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 11px; box-sizing: border-box; }}
+    .gb-panel h1 {{ margin: 0 0 4px; font-size: 16px; line-height: 1.2; }}
+    .gb-meta {{ margin: 0 0 10px; color: #52616b; font-size: 10.5px; line-height: 1.35; }}
+    .gb-total {{ font-weight: 700; margin: 8px 0 10px; font-size: 12px; }}
+    .gb-species-list {{ display: grid; gap: 5px; margin: 0 0 9px; }}
+    .gb-species-row {{ display: grid; grid-template-columns: 17px 13px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
+    .gb-species-row input {{ margin: 2px 0 0 0; }}
+    .gb-swatch {{ width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; border: 1px solid rgba(0,0,0,.35); }}
+    .gb-species-name {{ font-weight: 700; font-size: 12px; }}
+    .gb-counts {{ display: block; margin-top: 1px; color: #52616b; font-size: 10.5px; }}
+    .gb-row-off {{ opacity: .48; }}
+    .gb-footer {{ border-top: 1px solid #e3e8ef; padding-top: 8px; font-size: 10.5px; }}
+    .gb-footer a {{ color: #0f766e; font-weight: 700; text-decoration: none; }}
+    .gb-footer a:hover {{ text-decoration: underline; }}
+    .gb-popup-title {{ font-weight: 700; margin-bottom: 4px; }}
+    .gb-popup-row {{ margin: 2px 0; }}
+    .gb-error {{ color: #9f1239; font-weight: 700; }}
+    @media (max-width: 640px) {{ .gb-panel {{ left: 10px; right: 10px; top: 10px; width: auto; max-height: 44vh; }} }}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <aside class="gb-panel" aria-label="Target species legend">
+    <h1>{safe_title}</h1>
+    <p class="gb-meta" id="updated-meta">Loading recent target species sightings...</p>
+    <div class="gb-total" id="location-total"></div>
+    <div class="gb-species-list" id="species-list"></div>
+    <div class="gb-footer"><a href="../">All target species maps</a></div>
+  </aside>
+  <script>
+    const TARGET_DATA = {data_json};
+    const FALLBACK_CENTER = [{float(fallback_lat):.6f}, {float(fallback_lng):.6f}];
+    const FALLBACK_ZOOM = {int(fallback_zoom)};
+
+    const map = L.map('map', {{ scrollWheelZoom: true, preferCanvas: true }}).setView(FALLBACK_CENTER, FALLBACK_ZOOM);
+    L.tileLayer('https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+      maxZoom: 20,
+      subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      crossOrigin: true
+    }}).addTo(map);
+
+    window.addEventListener('load', () => {{
+      setTimeout(() => map.invalidateSize(), 100);
+      setTimeout(() => map.invalidateSize(), 500);
+    }});
+
+    const speciesLayers = new Map();
+    let allObservations = [];
+    let speciesConfig = [];
+
+    function normalizeKey(value) {{
+      return String(value || '').trim().toLowerCase();
+    }}
+
+    function formatDate(value) {{
+      if (!value) return 'unknown update time';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString([], {{ year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }});
+    }}
+
+    function checklistUrl(obs) {{
+      if (!obs.subId) return '';
+      return `https://ebird.org/checklist/${{obs.subId}}`;
+    }}
+
+    function locationKey(obs) {{
+      if (obs.locId) return obs.locId;
+      const lat = Number(obs.lat);
+      const lng = Number(obs.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return obs.locName || 'unknown';
+      return `${{lat.toFixed(5)}},${{lng.toFixed(5)}}`;
+    }}
+
+    function findSpeciesForObservation(obs) {{
+      const code = normalizeKey(obs.speciesCode || obs.code);
+      const displayName = normalizeKey(obs.displayName);
+      const commonName = normalizeKey(obs.comName);
+      return speciesConfig.find(item =>
+        normalizeKey(item.code) === code ||
+        normalizeKey(item.name) === displayName ||
+        normalizeKey(item.name) === commonName
+      ) || null;
+    }}
+
+    function layerKeyForObservation(obs) {{
+      const species = findSpeciesForObservation(obs);
+      return species ? species.code : (obs.speciesCode || obs.code || obs.displayName || obs.comName || 'unknown');
+    }}
+
+    function visibleObservations() {{
+      return allObservations.filter(obs => {{
+        const layer = speciesLayers.get(layerKeyForObservation(obs));
+        return layer && map.hasLayer(layer);
+      }});
+    }}
+
+    function updateVisibleLocationTotal() {{
+      const locations = new Set(visibleObservations().map(locationKey));
+      const label = locations.size === 1 ? 'location' : 'locations';
+      document.getElementById('location-total').textContent = `${{locations.size}} ${{label}} with sightings`;
+    }}
+
+    function makePopup(obs) {{
+      const count = Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : null;
+      const url = checklistUrl(obs);
+      const checklist = url ? `<div class="gb-popup-row"><a href="${{url}}" target="_blank" rel="noopener">Open eBird checklist</a></div>` : '';
+      return `
+        <div class="gb-popup-title">${{obs.displayName || obs.comName || 'Target species'}}</div>
+        <div class="gb-popup-row">${{obs.locName || 'Unknown location'}}</div>
+        <div class="gb-popup-row">${{obs.obsDt || ''}}${{count !== null ? `, ${{count}} bird${{count === 1 ? '' : 's'}}` : ''}}</div>
+        ${{checklist}}
+      `;
+    }}
+
+    function renderSpeciesList() {{
+      const container = document.getElementById('species-list');
+      container.innerHTML = '';
+      speciesConfig.forEach(species => {{
+        const observations = allObservations.filter(obs => layerKeyForObservation(obs) === species.code);
+        const birdCount = observations.reduce((sum, obs) => sum + (Number.isFinite(Number(obs.howMany)) ? Number(obs.howMany) : 1), 0);
+        const sightingCount = observations.length;
+        const row = document.createElement('label');
+        row.className = 'gb-species-row';
+        row.dataset.species = species.code;
+        row.innerHTML = `
+          <input type="checkbox" checked aria-label="Show ${{species.name}}">
+          <span class="gb-swatch" style="background:${{species.color || '#666'}}"></span>
+          <span><span class="gb-species-name">${{species.name}}</span><span class="gb-counts">${{birdCount}} bird${{birdCount === 1 ? '' : 's'}}, ${{sightingCount}} sighting${{sightingCount === 1 ? '' : 's'}}</span></span>
+        `;
+        row.querySelector('input').addEventListener('change', event => {{
+          const layer = speciesLayers.get(species.code);
+          if (!layer) return;
+          if (event.target.checked) {{
+            layer.addTo(map);
+            row.classList.remove('gb-row-off');
+          }} else {{
+            map.removeLayer(layer);
+            row.classList.add('gb-row-off');
+          }}
+          updateVisibleLocationTotal();
+        }});
+        container.appendChild(row);
+      }});
+    }}
+
+    function drawSearchRings(center, distKm) {{
+      const ringMiles = [1, 5, 10, 20].filter(mi => mi * 1.609344 <= distKm + 0.1);
+      ringMiles.forEach(mi => {{
+        L.circle(center, {{
+          radius: mi * 1609.344,
+          color: '#64748b',
+          weight: 1,
+          opacity: 0.25,
+          fillOpacity: 0,
+          interactive: false
+        }}).addTo(map);
+      }});
+    }}
+
+    function drawMap(data) {{
+      speciesConfig = Array.isArray(data.species) ? data.species : [];
+      allObservations = Array.isArray(data.observations) ? data.observations : [];
+      const center = [Number(data.centerLat) || FALLBACK_CENTER[0], Number(data.centerLng) || FALLBACK_CENTER[1]];
+      map.setView(center, FALLBACK_ZOOM);
+      drawSearchRings(center, Number(data.distKm) || 0);
+
+      speciesConfig.forEach(species => {{
+        speciesLayers.set(species.code, L.layerGroup().addTo(map));
+      }});
+
+      let markerCount = 0;
+      allObservations.forEach(obs => {{
+        const species = findSpeciesForObservation(obs);
+        const layer = speciesLayers.get(layerKeyForObservation(obs));
+        const lat = Number(obs.lat);
+        const lng = Number(obs.lng);
+        if (!layer || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        markerCount += 1;
+        L.circleMarker([lat, lng], {{
+          radius: 7,
+          color: '#111827',
+          weight: 1,
+          fillColor: obs.markerColor || (species && species.color) || '#666666',
+          fillOpacity: 0.95,
+          pane: 'markerPane'
+        }}).bindPopup(makePopup(obs)).addTo(layer);
+      }});
+
+      document.getElementById('updated-meta').textContent = `Updated ${{formatDate(data.lastUpdated)}}. Showing sightings from the last ${{data.backDays || 3}} days.`;
+      renderSpeciesList();
+      updateVisibleLocationTotal();
+
+      const bounds = [];
+      allObservations.forEach(obs => {{
+        const lat = Number(obs.lat);
+        const lng = Number(obs.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) bounds.push([lat, lng]);
+      }});
+      if (bounds.length) {{
+        map.fitBounds(bounds, {{ padding: [45, 45], maxZoom: 12 }});
+      }}
+      setTimeout(() => map.invalidateSize(), 100);
+
+      if (!markerCount && allObservations.length) {{
+        document.getElementById('updated-meta').innerHTML = '<span class="gb-error">Data loaded, but no valid marker coordinates matched the species list.</span>';
+      }}
+    }}
+
+    try {{
+      drawMap(TARGET_DATA || {{ species: [], observations: [] }});
+    }} catch (error) {{
+      document.getElementById('updated-meta').innerHTML = `<span class="gb-error">Map error: ${{error.message}}</span>`;
+      console.error(error);
+    }}
+  </script>
+</body>
+</html>
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data', required=True)
+    parser.add_argument('--out', required=True)
+    parser.add_argument('--title', required=True)
+    parser.add_argument('--fallback-lat', required=True, type=float)
+    parser.add_argument('--fallback-lng', required=True, type=float)
+    parser.add_argument('--fallback-zoom', default=10, type=int)
+    args = parser.parse_args()
+
+    data_path = Path(args.data)
+    out_path = Path(args.out)
+    data = json.loads(data_path.read_text(encoding='utf-8'))
+    html_text = build_html(args.title, args.fallback_lat, args.fallback_lng, args.fallback_zoom, data)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html_text, encoding='utf-8')
+    print(f'Wrote {out_path} with {len(data.get("observations", []))} observations embedded')
+
+
+if __name__ == '__main__':
+    main()

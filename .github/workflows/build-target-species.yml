@@ -1,4 +1,4 @@
-# GOODBIRDS_TARGET_SPECIES_V4_RENDER_FIX_2026-05-11
+# GOODBIRDS_TARGET_SPECIES_V6_EMBEDDED_DATA_RENDER_FIX_2026-05-11
 name: Build Target Species Maps
 
 on:
@@ -29,6 +29,7 @@ jobs:
             dist_km: "32"
             back_days: "3"
             output_dir: "docs/targets/estero/data"
+            html_path: "docs/targets/estero/index.html"
             species_json: >
               [
                 {"code":"burowl","name":"Burrowing Owl","color":"#8B4513"},
@@ -44,6 +45,7 @@ jobs:
             dist_km: "10"
             back_days: "3"
             output_dir: "docs/targets/noord-aruba/data"
+            html_path: "docs/targets/noord-aruba/index.html"
             species_json: >
               [
                 {"code":"brnboo","name":"Brown Booby","color":"#8B4513"},
@@ -71,6 +73,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p "${{ matrix.target.output_dir }}"
+          mkdir -p "$(dirname '${{ matrix.target.html_path }}')"
 
       - name: Fetch target species data for ${{ matrix.target.title }}
         env:
@@ -85,6 +88,17 @@ jobs:
           set -euxo pipefail
           python scripts/fetch_target_species.py
 
+      - name: Build self-contained target map page for ${{ matrix.target.title }}
+        run: |
+          set -euxo pipefail
+          python scripts/build_target_map_page.py \
+            --data "${{ matrix.target.output_dir }}/observations.json" \
+            --out "${{ matrix.target.html_path }}" \
+            --title "${{ matrix.target.title }}" \
+            --fallback-lat "${{ matrix.target.center_lat }}" \
+            --fallback-lng "${{ matrix.target.center_lng }}" \
+            --fallback-zoom 10
+
       - name: Commit and push target species outputs
         env:
           BRANCH_NAME: ${{ github.ref_name }}
@@ -92,7 +106,7 @@ jobs:
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/targets
+          git add docs/targets scripts/build_target_map_page.py
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
