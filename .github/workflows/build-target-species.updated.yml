@@ -1,0 +1,119 @@
+# GOODBIRDS_TARGET_SPECIES_V7_FOLIUM_RENDER_FIX_2026-05-11
+name: Build Target Species Maps
+
+on:
+  schedule:
+    - cron: "30 9 * * *"
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-target-species
+  cancel-in-progress: false
+
+jobs:
+  build-targets:
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      matrix:
+        target:
+          - slug: estero
+            title: "Estero, FL Target Species"
+            center_lat: "26.4317"
+            center_lng: "-81.8187"
+            dist_km: "32"
+            back_days: "3"
+            output_dir: "docs/targets/estero/data"
+            page_out: "docs/targets/estero/index.html"
+            zoom: "10"
+            species_json: >
+              [
+                {"code":"burowl","name":"Burrowing Owl","color":"#8B4513"},
+                {"code":"rosspo1","name":"Roseate Spoonbill","color":"#FF69B4"},
+                {"code":"limpki","name":"Limpkin","color":"#FFD700"},
+                {"code":"paibun","name":"Painted Bunting","color":"#4169E1"}
+              ]
+
+          - slug: noord-aruba
+            title: "Noord, Aruba Target Species"
+            center_lat: "12.561674"
+            center_lng: "-70.048173"
+            dist_km: "10"
+            back_days: "3"
+            output_dir: "docs/targets/noord-aruba/data"
+            page_out: "docs/targets/noord-aruba/index.html"
+            zoom: "12"
+            species_json: >
+              [
+                {"code":"brnboo","name":"Brown Booby","color":"#8B4513"},
+                {"code":"purgal2","name":"Purple Gallinule","color":"#800080"},
+                {"code":"ventro1","name":"Venezuelan Troupial","color":"#FF8C00"},
+                {"code":"y00678","name":"Crested Caracara","color":"#808080"},
+                {"code":"ruthum1","name":"Ruby-topaz Hummingbird","color":"#D00000"},
+                {"code":"bknsti","name":"Black-necked Stilt","color":"#000000"},
+                {"code":"soulap1","name":"Southern Lapwing","color":"#008080"}
+              ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          pip install requests folium
+
+      - name: Ensure target directories exist
+        run: |
+          set -euxo pipefail
+          mkdir -p "${{ matrix.target.output_dir }}"
+          mkdir -p "$(dirname '${{ matrix.target.page_out }}')"
+
+      - name: Fetch target species data for ${{ matrix.target.title }}
+        env:
+          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+          CENTER_LAT: ${{ matrix.target.center_lat }}
+          CENTER_LNG: ${{ matrix.target.center_lng }}
+          DIST_KM: ${{ matrix.target.dist_km }}
+          BACK_DAYS: ${{ matrix.target.back_days }}
+          OUTPUT_DIR: ${{ matrix.target.output_dir }}
+          TARGET_SPECIES_JSON: ${{ matrix.target.species_json }}
+        run: |
+          set -euxo pipefail
+          python scripts/fetch_target_species.py
+
+      - name: Build target map page for ${{ matrix.target.title }}
+        run: |
+          set -euxo pipefail
+          python scripts/build_target_map_page.py \
+            --data "${{ matrix.target.output_dir }}/observations.json" \
+            --out "${{ matrix.target.page_out }}" \
+            --title "${{ matrix.target.title }}" \
+            --zoom "${{ matrix.target.zoom }}"
+
+      - name: Commit and push target species outputs
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/targets scripts/build_target_map_page.py .github/workflows/build-target-species.yml .github/workflows/post-target-map-to-bluesky.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update target species maps"
+          branch="${BRANCH_NAME:-main}"
+          git fetch origin "$branch"
+          git pull --rebase origin "$branch" || true
+          git push origin "$branch"
