@@ -2,7 +2,6 @@
 """Build a Folium target-species map page from docs/targets/<slug>/data/observations.json."""
 import argparse
 import json
-import os
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +21,7 @@ GA_SNIPPET = """
 </script>
 """
 
-VERSION = "GOODBIRDS_TARGET_SPECIES_V9_CUSTOM_RADIUS_RINGS_2026-05-11"
+VERSION = "GOODBIRDS_TARGET_SPECIES_V10_CLEAR_SPECIES_2026-05-15"
 
 
 def esc(s):
@@ -121,7 +120,6 @@ def add_rings(m, center, ring_config):
     unit = (ring_config or {}).get("unit", "mi")
     values = list((ring_config or {}).get("values") or [])
 
-    # Center marker, matching the location notable map style.
     folium.CircleMarker(
         location=center,
         radius=4,
@@ -157,7 +155,6 @@ def add_rings(m, center, ring_config):
             interactive=False,
         ).add_to(m)
 
-        # Put small labels north of the center. They are map annotations, not legend entries.
         label_lat = center[0] + ((radius_m / 1000.0) / 111.0)
         label_html = (
             f"<div style='font:600 11px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;"
@@ -194,7 +191,11 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
       .gb-panel {{ position: fixed; z-index: 9999; left: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.95); border-radius: 12px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 11px; box-sizing: border-box; font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#1f2933; }}
       .gb-panel h1 {{ margin: 0 0 4px; font-size: 16px; line-height: 1.2; }}
       .gb-meta {{ margin: 0 0 10px; color: #52616b; font-size: 10.5px; line-height: 1.35; }}
-      .gb-total {{ font-weight: 700; margin: 8px 0 10px; font-size: 12px; }}
+      .gb-total {{ font-weight: 700; margin: 8px 0 8px; font-size: 12px; }}
+      .gb-actions {{ display: flex; gap: 6px; margin: 0 0 9px; }}
+      .gb-clear-species {{ appearance: none; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #1f2933; cursor: pointer; font: 700 11px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; padding: 6px 9px; }}
+      .gb-clear-species:hover {{ background: #f1f5f9; }}
+      .gb-clear-species:focus {{ outline: 2px solid #2c7fb8; outline-offset: 2px; }}
       .gb-species-list {{ display: grid; gap: 5px; margin: 0 0 9px; }}
       .gb-species-row {{ display: grid; grid-template-columns: 17px 13px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
       .gb-species-row input {{ margin: 2px 0 0 0; }}
@@ -212,6 +213,7 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
       <h1>{esc(title)}</h1>
       <p class="gb-meta">Updated {esc(updated)}. Showing sightings from the last {esc(back_days)} days.</p>
       <div class="gb-total" id="location-total">{esc(total_text)}</div>
+      <div class="gb-actions"><button type="button" class="gb-clear-species" id="gb-clear-species">Clear species</button></div>
       <div class="gb-species-list">{''.join(rows_html)}</div>
       <div class="gb-footer"><a href="../">All target species maps</a></div>
     </aside>
@@ -236,16 +238,34 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
           var totalEl = document.getElementById('location-total');
           if (totalEl) totalEl.textContent = count + ' ' + label + ' with sightings';
         }}
+        function setSpeciesChecked(cb, checked) {{
+          var row = cb.closest('.gb-species-row');
+          var layer = getLayer(cb.getAttribute('data-layer'));
+          if (!layer || !window.MAP_NAME_PLACEHOLDER) return;
+          cb.checked = checked;
+          if (checked) {{
+            if (!window.MAP_NAME_PLACEHOLDER.hasLayer(layer)) layer.addTo(window.MAP_NAME_PLACEHOLDER);
+            if (row) row.classList.remove('gb-row-off');
+          }} else {{
+            if (window.MAP_NAME_PLACEHOLDER.hasLayer(layer)) window.MAP_NAME_PLACEHOLDER.removeLayer(layer);
+            if (row) row.classList.add('gb-row-off');
+          }}
+        }}
         document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
           cb.addEventListener('change', function() {{
-            var row = cb.closest('.gb-species-row');
-            var layer = getLayer(cb.getAttribute('data-layer'));
-            if (!layer || !window.MAP_NAME_PLACEHOLDER) return;
-            if (cb.checked) {{ layer.addTo(window.MAP_NAME_PLACEHOLDER); row.classList.remove('gb-row-off'); }}
-            else {{ window.MAP_NAME_PLACEHOLDER.removeLayer(layer); row.classList.add('gb-row-off'); }}
+            setSpeciesChecked(cb, cb.checked);
             updateTotal();
           }});
         }});
+        var clearButton = document.getElementById('gb-clear-species');
+        if (clearButton) {{
+          clearButton.addEventListener('click', function() {{
+            document.querySelectorAll('.gb-species-row input[type="checkbox"]').forEach(function(cb) {{
+              setSpeciesChecked(cb, false);
+            }});
+            updateTotal();
+          }});
+        }}
       }})();
     </script>
     """
@@ -302,7 +322,7 @@ def main():
                     icon_anchor=(7, 7),
                 ),
             ).add_to(layer)
-        species_locations[str(sp.get("code") or sp.get("name"))] = sorted(species_locations) if False else sorted(species_locations_for_row)
+        species_locations[str(sp.get("code") or sp.get("name"))] = sorted(species_locations_for_row)
         species_rows.append({
             "code": str(sp.get("code") or sp.get("name")),
             "name": sp.get("name") or sp.get("code") or "Target species",
