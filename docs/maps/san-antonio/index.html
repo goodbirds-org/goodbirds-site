@@ -19,7 +19,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_68730ce63544feb2820f56fb03be0fb3 {
+                #map_249540331c4ad0b88e42386c735858e5 {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -58,6 +58,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.66.2/L.Control.Locate.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
 </head>
 <body>
     
@@ -105,7 +108,7 @@
         <div>
           <h3 class="gb-info-title">San Antonio, TX & Vicinity</h3>
           <div class="gb-info-meta">eBird Notable · 15 km radius · last 2 day(s)</div>
-          <div class="gb-info-row"><span>Built: Jun 10, 2026 01:20 AM EDT</span></div>
+          <div class="gb-info-row"><span>Built: Jun 10, 2026 02:39 PM EDT</span></div>
         </div>
       </div>
     </div>
@@ -122,16 +125,9 @@
     </script>
     
     
-    <div style="
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
-      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    ">No current notable birds for the selected window.</div>
-    
-    
     <script>
     (function(){
-      var speciesSet = new Set([]);
+      var speciesSet = new Set(['Ring-necked Duck']);
       function clearSpecies(){
         var root = document.querySelector('.leaflet-control-layers-overlays');
         if (!root) return;
@@ -156,14 +152,63 @@
       });
       function addWhenReady(){
         if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
-        (new ClearCtl({position:'topright'})).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+        (new ClearCtl({position:'topright'})).addTo(map_249540331c4ad0b88e42386c735858e5);
       }
       addWhenReady();
     })();
     </script>
     
     
-            <div class="folium-map" id="map_68730ce63544feb2820f56fb03be0fb3" ></div>
+    <script>
+    (function(){
+      var colorMap = {'Ring-necked Duck': '#22c34f'};
+
+      function decorate(){
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){
+            if(root.style.display==='none'){ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }
+            else { root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }
+          });
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        });
+        return true;
+      }
+
+      function whenReady(){ if(!decorate()) setTimeout(whenReady,200); }
+      whenReady();
+    })();
+    </script>
+    
+    
+            <div class="folium-map" id="map_249540331c4ad0b88e42386c735858e5" ></div>
         
 
 <!-- Google tag (gtag.js) -->
@@ -179,8 +224,8 @@
 <script>
     
     
-            var map_68730ce63544feb2820f56fb03be0fb3 = L.map(
-                "map_68730ce63544feb2820f56fb03be0fb3",
+            var map_249540331c4ad0b88e42386c735858e5 = L.map(
+                "map_249540331c4ad0b88e42386c735858e5",
                 {
                     center: [29.2955, -98.4786],
                     crs: L.CRS.EPSG3857,
@@ -192,13 +237,13 @@
 
                 }
             );
-            L.control.scale().addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            L.control.scale().addTo(map_249540331c4ad0b88e42386c735858e5);
 
             
 
         
     
-            var tile_layer_810099e710b44b005826240ba1fe6c71 = L.tileLayer(
+            var tile_layer_c1966efa55ae70f7fa028121dbbbf7a6 = L.tileLayer(
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -215,16 +260,16 @@
             );
         
     
-            tile_layer_810099e710b44b005826240ba1fe6c71.addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            tile_layer_c1966efa55ae70f7fa028121dbbbf7a6.addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var circle_marker_60350951123d9181725e7a5159f888a6 = L.circleMarker(
+            var circle_marker_6ce9ad41701f0c57e8b402bc10f6cfac = L.circleMarker(
                 [29.2955, -98.4786],
                 {"bubblingMouseEvents": true, "color": "#2c7fb8", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2c7fb8", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4, "stroke": true, "weight": 3}
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            circle_marker_60350951123d9181725e7a5159f888a6.bindTooltip(
+            circle_marker_6ce9ad41701f0c57e8b402bc10f6cfac.bindTooltip(
                 `<div>
                      Center
                  </div>`,
@@ -234,70 +279,70 @@
             );
         
     
-            var circle_f530cbb5b6c917cbd96fa28ad1ef5f0b = L.circle(
+            var circle_b933d719954c116a0a9f897c201e688c = L.circle(
                 [29.2955, -98.4786],
                 {"bubblingMouseEvents": true, "color": "#666666", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#666666", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 5000.0, "stroke": true, "weight": 2}
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var marker_f66965238f4f29b1db3d90eab1fa4b0e = L.marker(
+            var marker_e643284acf51368fd36fd2d564500674 = L.marker(
                 [29.340545045045047, -98.4786],
                 {
 }
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var div_icon_fda1b8ca0cb15272cf41e43b0704a8fb = L.divIcon({
+            var div_icon_7187a283d69e6e1fde8279b2f534106a = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#666666;\u0027\u003e5 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_f66965238f4f29b1db3d90eab1fa4b0e.setIcon(div_icon_fda1b8ca0cb15272cf41e43b0704a8fb);
+                marker_e643284acf51368fd36fd2d564500674.setIcon(div_icon_7187a283d69e6e1fde8279b2f534106a);
             
     
-            var circle_911329c2fd276dd59e1483426a7ee5a9 = L.circle(
+            var circle_d7a481de4eb72709b7119329aa4e5a71 = L.circle(
                 [29.2955, -98.4786],
                 {"bubblingMouseEvents": true, "color": "#555555", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#555555", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 10000.0, "stroke": true, "weight": 2}
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var marker_a6236d9750788a5e0b368026ccffed4b = L.marker(
+            var marker_bf47a6fd2e5a5b9c40751bcc90e12af9 = L.marker(
                 [29.38559009009009, -98.4786],
                 {
 }
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var div_icon_8e5f990dac64a801802cfe76c7ce6ab4 = L.divIcon({
+            var div_icon_45b0f3443531e9ee8064c62735c2d0a2 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#555555;\u0027\u003e10 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_a6236d9750788a5e0b368026ccffed4b.setIcon(div_icon_8e5f990dac64a801802cfe76c7ce6ab4);
+                marker_bf47a6fd2e5a5b9c40751bcc90e12af9.setIcon(div_icon_45b0f3443531e9ee8064c62735c2d0a2);
             
     
-            var circle_e90ac80f03fd7246a957d8d5d437728b = L.circle(
+            var circle_e5ffb2c92c6bea71445b375c1b509f51 = L.circle(
                 [29.2955, -98.4786],
                 {"bubblingMouseEvents": true, "color": "#08519c", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#08519c", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 15000.0, "stroke": true, "weight": 3}
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var marker_53a89a141d2f3b45972d240c47a62c83 = L.marker(
+            var marker_89f7cb66f2f389a423b1e44bf60cc8ae = L.marker(
                 [29.430635135135137, -98.4786],
                 {
 }
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var div_icon_4a6808c1bb7c611d0c5617a5418dc9a3 = L.divIcon({
+            var div_icon_6ca49cd3d5d5b8e3b1b4578dc1ed867a = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#08519c; font-weight:bold;\u0027\u003e15 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_53a89a141d2f3b45972d240c47a62c83.setIcon(div_icon_4a6808c1bb7c611d0c5617a5418dc9a3);
+                marker_89f7cb66f2f389a423b1e44bf60cc8ae.setIcon(div_icon_6ca49cd3d5d5b8e3b1b4578dc1ed867a);
             
     
             L.control.fullscreen(
@@ -307,16 +352,16 @@
   "titleCancel": "Exit Full Screen",
   "forceSeparateButton": false,
 }
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
         
     
-            var locate_control_44b78c0005e187996cfbe9062b0ab45e = L.control.locate(
+            var locate_control_ced1f295c6b706ab458bb4953c69361a = L.control.locate(
                 {"keepCurrentZoomLevel": false}
-            ).addTo(map_68730ce63544feb2820f56fb03be0fb3);
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
             
         
     
-            var mouse_position_f85aa17825dc0611cd4f9dfc841a10da = new L.Control.MousePosition(
+            var mouse_position_57ab5464e38fd565bc80cb95802e1095 = new L.Control.MousePosition(
                 {
   "position": "bottomright",
   "separator": " , ",
@@ -326,11 +371,94 @@
   "prefix": "Lat, Lon:",
 }
             );
-            mouse_position_f85aa17825dc0611cd4f9dfc841a10da.options["latFormatter"] =
+            mouse_position_57ab5464e38fd565bc80cb95802e1095.options["latFormatter"] =
                 undefined;
-            mouse_position_f85aa17825dc0611cd4f9dfc841a10da.options["lngFormatter"] =
+            mouse_position_57ab5464e38fd565bc80cb95802e1095.options["lngFormatter"] =
                 undefined;
-            map_68730ce63544feb2820f56fb03be0fb3.addControl(mouse_position_f85aa17825dc0611cd4f9dfc841a10da);
+            map_249540331c4ad0b88e42386c735858e5.addControl(mouse_position_57ab5464e38fd565bc80cb95802e1095);
+        
+    
+            var feature_group_477334d1659eca12a97f63570441a3b3 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_a95f313625820d47ce2b27ba200f4259 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_413434f81ed798a68e7e47c0f6c2ab16 = L.marker(
+                [29.3105956, -98.4996938],
+                {
+}
+            ).addTo(marker_cluster_a95f313625820d47ce2b27ba200f4259);
+        
+    
+            var div_icon_fca2d459aeda693bf281b29a1843f183 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#22c34f;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_5d37df2fde106214400f407f990716bc = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_dc1d25478327787e1d907a4f6a789d2c = $(`<div id="html_dc1d25478327787e1d907a4f6a789d2c" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Ring-necked Duck</b></div><div><b>Location:</b> Mitchell Lake Audubon Center (HOTE 103)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S355435602' target='_blank' rel='noopener'>Checklist</a> – 2026-06-10 07:00 (1)</li><li><a href='https://ebird.org/checklist/S355435700' target='_blank' rel='noopener'>Checklist</a> – 2026-06-10 07:00 (1)</li></ul></div></div>`)[0];
+                popup_5d37df2fde106214400f407f990716bc.setContent(html_dc1d25478327787e1d907a4f6a789d2c);
+            
+        
+
+        marker_413434f81ed798a68e7e47c0f6c2ab16.bindPopup(popup_5d37df2fde106214400f407f990716bc)
+        ;
+
+        
+    
+    
+            marker_413434f81ed798a68e7e47c0f6c2ab16.bindTooltip(
+                `<div>
+                     Ring-necked Duck
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_413434f81ed798a68e7e47c0f6c2ab16.setIcon(div_icon_fca2d459aeda693bf281b29a1843f183);
+            
+    
+            marker_cluster_a95f313625820d47ce2b27ba200f4259.addTo(feature_group_477334d1659eca12a97f63570441a3b3);
+        
+    
+            feature_group_477334d1659eca12a97f63570441a3b3.addTo(map_249540331c4ad0b88e42386c735858e5);
+        
+    
+            var layer_control_92f7542d0eefce268a3779cd17380609_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_c1966efa55ae70f7fa028121dbbbf7a6,
+                },
+                overlays :  {
+                    "Ring-necked Duck" : feature_group_477334d1659eca12a97f63570441a3b3,
+                },
+            };
+            let layer_control_92f7542d0eefce268a3779cd17380609 = L.control.layers(
+                layer_control_92f7542d0eefce268a3779cd17380609_layers.base_layers,
+                layer_control_92f7542d0eefce268a3779cd17380609_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_249540331c4ad0b88e42386c735858e5);
+
         
 </script>
 </html>
