@@ -21,7 +21,14 @@ GA_SNIPPET = """
 </script>
 """
 
-VERSION = "GOODBIRDS_TARGET_SPECIES_V10_CLEAR_SPECIES_2026-05-15"
+VERSION = "GOODBIRDS_TARGET_SPECIES_V11_LOCATION_CHECKLISTS_2026-10-26"
+
+GROUP_LABELS = OrderedDict([
+    ("dabbler", "Dabbling ducks"),
+    ("diver", "Diving ducks"),
+    ("merganser", "Mergansers"),
+    ("other", "Other waterbirds"),
+])
 
 
 def esc(s):
@@ -74,31 +81,64 @@ def species_match(obs, species):
     return str(species.get("code") or "").strip().lower() in vals or str(species.get("name") or "").strip().lower() in vals
 
 
-def make_popup(obs):
-    name = esc(obs.get("displayName") or obs.get("comName") or "Target species")
-    loc = esc(obs.get("locName") or "Unknown location")
-    dt = esc(obs.get("obsDt") or "")
-    count = obs.get("howMany")
-    count_text = ""
-    try:
-        c = int(float(count))
-        count_text = f", {c} bird" + ("" if c == 1 else "s")
-    except Exception:
-        pass
-    cid = obs.get("subId") or ""
-    checklist = f"<div><a href='https://ebird.org/checklist/{esc(cid)}' target='_blank' rel='noopener'>Open eBird checklist</a></div>" if cid else ""
+def unique_sightings(observations):
+    """Keep each retrieved species/checklist at a location once, without losing dates."""
+    seen = set()
+    result = []
+    for obs in observations:
+        species = obs.get("speciesCode") or obs.get("displayName") or obs.get("comName")
+        record = obs.get("subId") or (obs.get("obsDt"), str(obs.get("howMany")))
+        key = (loc_key(obs), species, record)
+        if key not in seen:
+            seen.add(key)
+            result.append(obs)
+    return result
+
+
+def make_popup(observations, species):
+    """Show every retrieved checklist, grouped by species, for one location."""
+    loc = esc(observations[0].get("locName") or "Unknown location")
+    sections = []
+    for sp in species:
+        sightings = unique_sightings([o for o in observations if species_match(o, sp)])
+        if not sightings:
+            continue
+        entries = []
+        for obs in sorted(sightings, key=lambda o: str(o.get("obsDt") or ""), reverse=True):
+            count = obs.get("howMany")
+            count_text = f" · {esc(count)} reported" if count is not None else " · count not reported"
+            cid = obs.get("subId")
+            link = (f"<a href='https://ebird.org/checklist/{esc(cid)}' target='_blank' rel='noopener'>"
+                    f"Checklist {esc(cid)}</a>" if cid else "Checklist link unavailable")
+            entries.append(f"<li>{esc(obs.get('obsDt') or 'Date unavailable')}{count_text}<br>{link}</li>")
+        sections.append(f"<section><strong>{esc(sp.get('name') or sp.get('code'))}</strong>"
+                        f"<ul style='padding-left:18px;margin:4px 0 12px'>{''.join(entries)}</ul></section>")
     return folium.Popup(
-        f"<div style='font-size:13px;line-height:1.35'>"
-        f"<div style='font-weight:700;margin-bottom:4px'>{name}</div>"
-        f"<div>{loc}</div>"
-        f"<div>{dt}{count_text}</div>"
-        f"{checklist}</div>",
-        max_width=340,
+        f"<div style='font-size:13px;line-height:1.4;max-height:300px;overflow-y:auto'>"
+        f"<strong>{loc}</strong><p style='margin:4px 0 10px'>"
+        f"{len(sections)} species · all checklists associated with retrieved sightings</p>"
+        f"{''.join(sections)}</div>",
+        max_width=380,
     )
 
 
-def icon_html(color):
+def icon_html(color, group=None, size=24):
     color = esc(color or "#666666")
+    if group in GROUP_LABELS:
+        # Shared duck silhouette, with waves, a dive arrow or a long bill.
+        body = '<path d="M3 13 Q8 10 12 12 L14 8 Q14 4 18 4 Q22 4 22 8 L25 9 L21 11 Q22 19 13 20 Q5 21 3 13Z"/>'
+        detail = {
+            "dabbler": '<path d="M3 24 Q6 22 9 24 T15 24 T21 24" fill="none"/>',
+            "diver": '<path d="M27 17 V27 M24 24 L27 27 L30 24" fill="none"/>',
+            "merganser": '<path d="M21 8 L30 9 L21 11Z"/>',
+            "other": '<circle cx="16" cy="15" r="10"/><circle cx="16" cy="15" r="4" fill="white" stroke="none"/>',
+        }[group]
+        silhouette = "" if group == "other" else body
+        return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+                f'viewBox="0 0 32 32" role="img" aria-label="{GROUP_LABELS[group]}" '
+                f'style="overflow:visible;filter:drop-shadow(0 1px 1px white)">'
+                f'<g fill="{color}" stroke="#111827" stroke-width="1.5" stroke-linejoin="round">'
+                f'{silhouette}{detail}</g></svg>')
     return (
         f"<div style='width:14px;height:14px;border-radius:50%;"
         f"background:{color};border:1.5px solid #111827;box-shadow:0 1px 3px rgba(0,0,0,.35);'></div>"
@@ -168,7 +208,7 @@ def add_rings(m, center, ring_config):
         ).add_to(m)
 
 
-def build_legend(title, updated, back_days, species_rows, total_locations, layer_names, species_locations):
+def build_legend(title, updated, back_days, species_rows, total_locations, layer_names, species_locations, note="", pending=False):
     rows_html = []
     for row in species_rows:
         code = esc(row["code"])
@@ -176,16 +216,26 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
         color = esc(row["color"])
         bird_count = int(row["bird_count"])
         sighting_count = int(row["sighting_count"])
+        swatch = (icon_html(row["color"], row.get("group"), size=18) if row.get("group") in GROUP_LABELS
+                  else f'<span class="gb-swatch" style="background:{color}"></span>')
         rows_html.append(f"""
           <label class="gb-species-row" data-species="{code}">
             <input type="checkbox" checked data-layer="{code}" aria-label="Show {name}">
-            <span class="gb-swatch" style="background:{color}"></span>
+            {swatch}
             <span><span class="gb-species-name">{name}</span><span class="gb-counts">{bird_count} bird{'s' if bird_count != 1 else ''}, {sighting_count} sighting{'s' if sighting_count != 1 else ''}</span></span>
           </label>
         """)
     layer_json = json.dumps(layer_names)
     species_locations_json = json.dumps(species_locations)
     total_text = f"{total_locations} location{'s' if total_locations != 1 else ''} with sightings"
+    if pending:
+        total_text = "Awaiting the first eBird update; sightings have not been fetched yet."
+    groups = {r.get("group") for r in species_rows}
+    group_key = "".join(f'<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0">'
+                        f'{icon_html("#52616b", group, size=20)} {label}</span>'
+                        for group, label in GROUP_LABELS.items() if group in groups)
+    note_html = f'<p class="gb-meta">{esc(note)}</p>' if note else ""
+    group_html = f'<div class="gb-meta" aria-label="Marker icon key">{group_key}</div>' if group_key else ""
     return f"""
     <style>
       .gb-panel {{ position: fixed; z-index: 9999; left: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: rgba(255,255,255,.95); border-radius: 12px; box-shadow: 0 10px 35px rgba(0,0,0,.22); padding: 11px; box-sizing: border-box; font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#1f2933; }}
@@ -197,7 +247,7 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
       .gb-clear-species:hover {{ background: #f1f5f9; }}
       .gb-clear-species:focus {{ outline: 2px solid #2c7fb8; outline-offset: 2px; }}
       .gb-species-list {{ display: grid; gap: 5px; margin: 0 0 9px; }}
-      .gb-species-row {{ display: grid; grid-template-columns: 17px 13px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
+      .gb-species-row {{ display: grid; grid-template-columns: 17px 18px 1fr; gap: 6px; align-items: start; padding: 5px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; }}
       .gb-species-row input {{ margin: 2px 0 0 0; }}
       .gb-swatch {{ width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; border: 1px solid rgba(0,0,0,.35); }}
       .gb-species-name {{ font-weight: 700; font-size: 12px; }}
@@ -211,7 +261,9 @@ def build_legend(title, updated, back_days, species_rows, total_locations, layer
     </style>
     <aside class="gb-panel" aria-label="Target species legend">
       <h1>{esc(title)}</h1>
+      {note_html}
       <p class="gb-meta">Updated {esc(updated)}. Showing sightings from the last {esc(back_days)} days.</p>
+      {group_html}
       <div class="gb-total" id="location-total">{esc(total_text)}</div>
       <div class="gb-actions"><button type="button" class="gb-clear-species" id="gb-clear-species">Clear species</button></div>
       <div class="gb-species-list">{''.join(rows_html)}</div>
@@ -283,14 +335,18 @@ def main():
     out_path = Path(args.out)
     data = json.loads(data_path.read_text(encoding="utf-8"))
     species = data.get("species") or []
-    observations = data.get("observations") or []
+    observations = unique_sightings(data.get("observations") or [])
+    location_observations = OrderedDict()
+    for obs in observations:
+        if any(species_match(obs, sp) for sp in species):
+            location_observations.setdefault(loc_key(obs), []).append(obs)
     center = [float(data.get("centerLat") or 0), float(data.get("centerLng") or 0)]
 
     m = folium.Map(location=center, zoom_start=int(args.zoom), control_scale=True)
     Fullscreen().add_to(m)
     LocateControl(auto_start=False, keepCurrentZoomLevel=False).add_to(m)
     MousePosition(separator=" , ", prefix="Lat, Lon:").add_to(m)
-    add_rings(m, center, ring_config_for_target(args.title, out_path))
+    add_rings(m, center, data.get("ringConfig") or ring_config_for_target(args.title, out_path))
 
     species_rows = []
     layer_names = OrderedDict()
@@ -304,7 +360,11 @@ def main():
         layer.add_to(m)
         layer_names[str(sp.get("code") or sp.get("name"))] = layer.get_name()
         species_locations_for_row = set()
+        sp_locations = OrderedDict()
         for obs in sp_obs:
+            sp_locations.setdefault(loc_key(obs), []).append(obs)
+        for location, sightings in sp_locations.items():
+            obs = sightings[0]
             try:
                 lat = float(obs.get("lat")); lng = float(obs.get("lng"))
             except Exception:
@@ -315,11 +375,11 @@ def main():
             folium.Marker(
                 location=[lat, lng],
                 tooltip=obs.get("displayName") or obs.get("comName") or sp.get("name"),
-                popup=make_popup(obs),
+                popup=make_popup(location_observations[location], species),
                 icon=folium.DivIcon(
-                    html=icon_html(obs.get("markerColor") or sp.get("color") or "#666666"),
-                    icon_size=(14, 14),
-                    icon_anchor=(7, 7),
+                    html=icon_html(obs.get("markerColor") or sp.get("color") or "#666666", sp.get("group")),
+                    icon_size=(24, 24) if sp.get("group") in GROUP_LABELS else (14, 14),
+                    icon_anchor=(12, 12) if sp.get("group") in GROUP_LABELS else (7, 7),
                 ),
             ).add_to(layer)
         species_locations[str(sp.get("code") or sp.get("name"))] = sorted(species_locations_for_row)
@@ -327,17 +387,18 @@ def main():
             "code": str(sp.get("code") or sp.get("name")),
             "name": sp.get("name") or sp.get("code") or "Target species",
             "color": sp.get("color") or "#666666",
+            "group": sp.get("group"),
             "bird_count": count_birds(sp_obs),
             "sighting_count": len(sp_obs),
             "location_count": len(species_locations_for_row),
         })
 
-    if bounds:
+    if bounds and not data.get("ringConfig"):
         m.fit_bounds(bounds, padding=(45, 45), max_zoom=12)
 
     folium.LayerControl(collapsed=True).add_to(m)
     map_name = m.get_name()
-    legend = build_legend(args.title, fmt_updated(data.get("lastUpdated")), data.get("backDays") or "", species_rows, len(total_locations), layer_names, species_locations)
+    legend = build_legend(args.title, fmt_updated(data.get("lastUpdated")), data.get("backDays") or "", species_rows, len(total_locations), layer_names, species_locations, data.get("note") or "", data.get("dataStatus") == "pending")
     legend = legend.replace("MAP_NAME_PLACEHOLDER", map_name)
     m.get_root().html.add_child(folium.Element(legend))
 

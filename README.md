@@ -42,12 +42,12 @@ This map is built by `scripts/build_mega_map.py` and the `.github/workflows/buil
 
 Target Species Maps are focused maps for selected species in selected places. They are separate from the regular city notable-birds maps.
 
-Recommended URL pattern:
+URL pattern:
 
 - <https://goodbirds.org/targets/>
 - <https://goodbirds.org/targets/estero/>
 
-Recommended file structure:
+File structure (also includes `noord-aruba/` and `north-cambridge-weird-ducks/`):
 
 ```text
 docs/
@@ -60,7 +60,28 @@ docs/
         observations.json
 ```
 
-The first target map is intended for the Estero, Florida area near Koreshan State Park and tracks selected species such as Burrowing Owl, Limpkin, Roseate Spoonbill, and Painted Bunting.
+The Estero, Florida map near Koreshan State Park tracks Burrowing Owl, Limpkin, Roseate Spoonbill, Painted Bunting, and Sandhill Crane. A second target map covers Noord, Aruba. The workflow matrix is the source of truth for species and settings.
+
+The **North Cambridge MA & Vicinity Weird Ducks*** map is at
+<https://goodbirds.org/targets/north-cambridge-weird-ducks/> and is listed on
+the target index. It includes all 20 agreed species (the earlier planning total
+of 22 was a counting error). It uses the regular North Cambridge center
+(42.400973, -71.135970), 10 km search radius, 1/5/10 km rings, and starting zoom 11.
+The lookback is three days; updates share the target workflow's 09:30 and 18:30 UTC
+schedule (5:30 AM/2:30 PM EDT; 4:30 AM/1:30 PM EST). Scheduled starts may be delayed.
+
+*Not all ducks: a selection of waterbirds found on inland waters in fall and winter.*
+Species colors are paired with icons for dabblers, divers, mergansers and other
+waterbirds. These are display groups rather than strict taxonomic families.
+Codes were checked against the [official eBird taxonomy API](https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json)
+on October 26, 2026; the repository's taxonomy inputs were not replaced.
+
+Each target location popup includes every distinct checklist associated with
+retrieved sightings, grouped by species and showing observation dates and counts
+when available. Duplicate species/checklist entries are removed; a shared
+checklist remains accessible under each relevant species. This does not add
+requests for a complete location checklist history. A failed species fetch stops
+publication of that target's new data, preserving its previous observations.
 
 ## Repository structure
 
@@ -98,6 +119,7 @@ scripts/
   build_mega_map.py             Builds the US + Canada mega-rarities map
   make_cities_json.py           Generates cities.json and cities_map.html
   fetch_target_species.py       Fetches selected species for target maps
+  build_target_map_page.py      Renders target pages from saved observation data
   capture_and_post_bsky.py      Captures map screenshots and posts to Bluesky
 
 .github/workflows/
@@ -112,30 +134,195 @@ scripts/
 
 ## Local setup
 
-Create a virtual environment and install dependencies:
+Run from the existing checkout in PowerShell. CI uses Python 3.11. First check
+available interpreters; Windows Store aliases alone do not provide Python:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+```powershell
+Set-Location C:\github\goodbirds-site
+Get-Command py, python, python3 -ErrorAction SilentlyContinue
+py -3.11 --version
 ```
 
-Current dependencies:
+With a working Python 3.11 installation:
 
-```text
-folium
-requests
-ipywidgets
-playwright
-atproto
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-For Bluesky screenshot workflows, install the Playwright Chromium browser locally:
+Activation is unnecessary, so no PowerShell execution-policy change is needed.
+If `py` is unavailable, use the full path to a working interpreter. On October 26,
+2026, this machine had a working Codex-bundled Python 3.12.14 at the following
+path (it may move with app updates):
 
-```bash
-python -m playwright install chromium
+```powershell
+$pythonExe = 'C:\Users\mam466\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+& $pythonExe --version
+& $pythonExe -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+For a durable setup independent of Codex updates, install Python 3.11 and use
+the first setup sequence. Do not use the old `C:\Python27` installation.
+Dependencies include Folium, requests, ipywidgets, Playwright, atproto, PyYAML
+(coverage and workflow parsing), and tzdata on Windows (Eastern time zones).
+Package installation needs access to the configured package index.
+
+### Preview the existing site without credentials
+
+```powershell
+.\.venv\Scripts\python.exe -m http.server 8000 --bind 127.0.0.1 --directory docs
+```
+
+Open <http://127.0.0.1:8000/>. Check `/cities_map.html`, `/maps/cambridge/`,
+`/mega/`, `/targets/estero/`, and `/targets/noord-aruba/`. Stop with Ctrl+C.
+Use HTTP so browser data requests work. Some generated links and redirects use
+`https://goodbirds.org` and will leave the preview. Map libraries, tiles and
+analytics load from external services; preview does not imply offline maps.
+
+### Validate without fetching observations or posting
+
+```powershell
+.\.venv\Scripts\python.exe -m pip check
+@'
+import ast
+import json
+from pathlib import Path
+import folium, requests, yaml, playwright, atproto
+from zoneinfo import ZoneInfo
+
+print("Eastern time:", ZoneInfo("America/New_York"))
+for path in Path("scripts").glob("*.py"):
+    ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    print("Python OK:", path)
+for path in Path(".github/workflows").glob("*.yml"):
+    yaml.safe_load(path.read_text(encoding="utf-8"))
+    print("YAML OK:", path)
+for path in Path("docs").rglob("*.json"):
+    json.loads(path.read_text(encoding="utf-8-sig"))
+    print("JSON OK:", path)
+'@ | .\.venv\Scripts\python.exe -
+git diff --check
+```
+
+These checks parse source without running API calls. YAML parsing checks syntax,
+not GitHub Actions semantics. Run the target-map regression tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The target workflow also runs these tests before fetching data. They check
+geometry and species configuration, checklist retention/deduplication, and
+preservation of previous data if a species request fails.
+
+### Rebuild saved target pages and coverage in isolation
+
+No API key is needed for these generators. The following writes only ignored
+scratch files and preserves the published pages:
+
+```powershell
+New-Item -ItemType Directory -Force .local-preview | Out-Null
+.\.venv\Scripts\python.exe scripts/build_target_map_page.py --data docs/targets/estero/data/observations.json --out .local-preview/estero/index.html --title 'Estero, FL Target Species' --zoom 10
+.\.venv\Scripts\python.exe scripts/build_target_map_page.py --data docs/targets/noord-aruba/data/observations.json --out .local-preview/noord-aruba/index.html --title 'Noord, Aruba Target Species' --zoom 12
+$repoRoot = (Get-Location).Path
+$oldWorkflow = $env:GOODBIRDS_WORKFLOW_YAML
+$oldBaseUrl = $env:GOODBIRDS_BASE_URL
+$env:GOODBIRDS_WORKFLOW_YAML = Join-Path $repoRoot '.github/workflows/build.yml'
+$env:GOODBIRDS_BASE_URL = 'http://127.0.0.1:8000'
+Push-Location .local-preview
+try {
+    & "$repoRoot\.venv\Scripts\python.exe" "$repoRoot\scripts\make_cities_json.py"
+} finally {
+    Pop-Location
+    $env:GOODBIRDS_WORKFLOW_YAML = $oldWorkflow
+    $env:GOODBIRDS_BASE_URL = $oldBaseUrl
+}
+```
+
+Coverage always writes to `docs/` relative to the current working directory;
+the scratch run therefore writes `.local-preview/docs/`. To inspect these builds,
+serve `.local-preview` on a different port with `--directory .local-preview`.
+
+### Screenshots and Bluesky dry run
+
+Install Chromium only when screenshot testing is needed. Start the site preview
+in another terminal before running the following:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install chromium
+$env:DRY_RUN = '1'
+$env:FORCE_MAP_URL = 'http://127.0.0.1:8000/maps/cambridge/'
+.\.venv\Scripts\python.exe scripts/capture_and_post_bsky.py
+```
+
+A dry run captures the page and prints post text without signing in or posting.
+It needs no Bluesky credentials. Its screenshot is temporary and deleted on exit.
+Close the testing terminal afterward to clear its environment overrides.
+
+### Fresh observations on Windows
+
+Fresh city, mega and target-data builds need `EBIRD_API_KEY`. Set it privately
+in the current terminal; scripts do not automatically read `.env`. Use PowerShell
+environment syntax, for example:
+
+```powershell
+$env:OUTPUT_DIR = '.local-preview/cambridge'
+$env:MAP_MAIN_TITLE = 'Cambridge, MA & Vicinity'
+$env:CENTER_LAT = '42.378500'
+$env:CENTER_LON = '-71.115600'
+$env:DEFAULT_RADIUS_KM = '20'
+$env:RING_KMS = '5,10,15,20'
+.\.venv\Scripts\python.exe scripts/build_map.py
+```
+
+For mega builds, use the command below as a single PowerShell line after setting
+the API key and any desired `MEGA_*` values:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/build_mega_map.py --aba_csv scripts/data/ABA_Checklist.csv --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv --out_dir .local-preview/mega --codes 4,5
+```
+
+For target-data builds, copy the selected target's matrix settings into the
+environment using `$env:NAME = 'value'`; use `CENTER_LNG` (city builds use
+`CENTER_LON`), and set `OUTPUT_DIR` to `.local-preview/<slug>/data`. Then run
+`scripts/fetch_target_species.py` with the environment interpreter and render
+that observations file with `scripts/build_target_map_page.py`.
+Use a fresh terminal for each map type to avoid reusing unrelated settings.
+
+The examples in the later build sections use Bash syntax for Linux/macOS;
+`export`, backslash continuations and `mkdir -p` are not PowerShell commands.
+
+## Local verification — October 26, 2026
+
+- Starting checkout: `main` at `bb2c968ac`, matching locally recorded
+  `origin/main`; 147 tracked files present and no initial changes. No fetch was
+  performed during this setup pass.
+- Created ignored `.venv/` using bundled Python 3.12.14; installed requirements.
+  Dependency checks, library imports and Eastern time-zone lookup passed.
+- Parsed all 6 Python scripts, 7 workflows and 11 published JSON files.
+  All 30 city matrix entries matched coverage, map pages and redirects; both
+  target entries matched index metadata, pages and configured species.
+- Rebuilt both target pages from saved observations and rebuilt coverage in
+  ignored `.local-preview/`. Published files under `docs/` were unchanged.
+- Local HTTP preview returned content successfully for the homepage, coverage,
+  Cambridge city map, mega map, both target pages and Estero observation JSON.
+  This was an HTTP check, not a browser rendering or interaction test.
+- Playwright's helper starts, but its Chromium browser is not installed.
+  Install Chromium before screenshot/dry-run testing; those tests remain pending.
+- Fresh eBird builds, credential availability, GitHub secret configuration,
+  current remote state and GitHub Pages settings remain unverified. A standalone
+  Python 3.11 installation is optional for matching CI and avoiding reliance on
+  the Codex runtime path.
+- Mega workflow maintenance remains: `aba5_only` still invokes `--codes 4,5`,
+  `union` still encounters the final code 4/5 filter, and `per_species_max` input
+  is ignored in favor of a hard-coded `0`.
+- Taxonomy files were unchanged. Before updating, verify the latest official
+  eBird and ABA releases, use an eBird CSV containing `SPECIES_CODE`, then rebuild
+  mega outputs and inspect code matching and unresolved names. Current unresolved
+  names are `Little White-Tern` and `Wandering Albatross (sp.)`. An existing weekly
+  taxonomy reminder should not be duplicated.
 
 ## Required secrets
 
@@ -252,7 +439,7 @@ Builds `docs/mega/index.html` and related JSON summary files.
 
 `.github/workflows/build-target-species.yml`
 
-Recommended workflow for building selected-species maps. Each matrix row should define:
+Builds both configured target maps and regenerates the target index. Each matrix row defines settings such as:
 
 ```yaml
 slug: estero
@@ -316,48 +503,18 @@ Use `DRY_RUN=1` before enabling a new posting workflow publicly.
 
 ## Adding a new Target Species Map
 
-1. Create the target page directory:
-
-```bash
-mkdir -p docs/targets/new-target/data
-```
-
-2. Add or copy an `index.html` page to:
-
-```text
-docs/targets/new-target/index.html
-```
-
-3. Make sure the page fetches data by relative path:
-
-```javascript
-fetch("./data/observations.json")
-```
-
-4. Add the target to `docs/targets/targets.json`:
-
-```json
-{
-  "slug": "new-target",
-  "title": "New Target Species Map",
-  "subtitle": "Species One, Species Two, Species Three",
-  "region": "Region Name",
-  "centerName": "Center Place Name",
-  "radiusLabel": "20 mi",
-  "lookbackLabel": "past 3 days",
-  "url": "new-target/"
-}
-```
-
-5. Add a matrix item to `.github/workflows/build-target-species.yml`.
-6. Run the workflow manually.
-7. Test the page at:
-
-```text
-https://goodbirds.org/targets/new-target/
-```
-
-8. Add the page to the target Bluesky workflow if desired.
+1. Add a matrix item in `.github/workflows/build-target-species.yml`, copying
+   Estero or Noord, Aruba. Set the slug, title, coordinates, distance, lookback,
+   output paths, zoom and species JSON.
+2. Keep outputs under `docs/targets/<slug>/`; the workflow fetches observations
+   and renders the map with `scripts/build_target_map_page.py`.
+3. The index job reads the matrix and regenerates `docs/targets/targets.json`
+   and `docs/targets/index.html`. Edit its workflow template for persistent
+   index changes; do not maintain the generated metadata manually.
+4. Validate the saved-data renderer locally, then run the workflow manually
+   when ready to fetch data and publish. Check `/targets/<slug>/` and the index.
+5. Add the target to the target Bluesky workflow if desired and test with
+   `DRY_RUN=1`.
 
 ## URL patterns
 

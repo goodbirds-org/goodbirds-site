@@ -12,6 +12,8 @@ Optional env vars:
   BACK_DAYS
   OUTPUT_DIR
   TARGET_SPECIES_JSON
+  RING_KMS (optional explicit kilometer rings)
+  MAP_NOTE (optional explanatory text)
 """
 
 import os
@@ -53,6 +55,7 @@ BASE_URL = "https://api.ebird.org/v2/data/obs/geo/recent"
 HEADERS = {"X-eBirdApiToken": API_KEY}
 
 all_observations = []
+failed_species = []
 
 for species in species_list:
     code = species["code"]
@@ -75,11 +78,13 @@ for species in species_list:
         obs_list = resp.json()
 
     except requests.exceptions.HTTPError as exc:
-        status = exc.response.status_code if exc.response else "?"
+        status = exc.response.status_code if exc.response is not None else "?"
         print(f"HTTP {status} for {name}: {exc}", file=sys.stderr)
+        failed_species.append(name)
         continue
     except requests.exceptions.RequestException as exc:
         print(f"Request error for {name}: {exc}", file=sys.stderr)
+        failed_species.append(name)
         continue
 
     for obs in obs_list:
@@ -88,6 +93,11 @@ for species in species_list:
 
     all_observations.extend(obs_list)
     print(f"{name}: {len(obs_list)} observation(s) found")
+
+if failed_species:
+    print("ERROR: Fetch incomplete; existing observation data was not overwritten. Failed species: "
+          + ", ".join(failed_species), file=sys.stderr)
+    sys.exit(1)
 
 output = {
     "lastUpdated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -98,6 +108,10 @@ output = {
     "species": species_list,
     "observations": all_observations,
 }
+if os.environ.get("RING_KMS", "").strip():
+    output["ringConfig"] = {"unit": "km", "values": [float(v.strip()) for v in os.environ["RING_KMS"].split(",") if v.strip()]}
+if os.environ.get("MAP_NOTE", "").strip():
+    output["note"] = os.environ["MAP_NOTE"].strip()
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 output_path = os.path.join(OUTPUT_DIR, "observations.json")

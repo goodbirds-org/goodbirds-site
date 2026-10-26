@@ -60,6 +60,41 @@ jobs:
                 {"code":"soulap1","name":"Southern Lapwing","color":"#008080"}
               ]
 
+          - slug: north-cambridge-weird-ducks
+            title: "North Cambridge MA & Vicinity Weird Ducks*"
+            center_lat: "42.400973"
+            center_lng: "-71.135970"
+            dist_km: "10"
+            ring_kms: "1,5,10"
+            back_days: "3"
+            output_dir: "docs/targets/north-cambridge-weird-ducks/data"
+            page_out: "docs/targets/north-cambridge-weird-ducks/index.html"
+            zoom: "11"
+            note: "* Not all ducks: a selection of waterbirds found on inland waters in fall and winter."
+            species_json: >
+              [
+                {"code":"hoomer","name":"Hooded Merganser","color":"#7c3aed","group":"merganser"},
+                {"code":"commer","name":"Common Merganser","color":"#c026d3","group":"merganser"},
+                {"code":"rudduc","name":"Ruddy Duck","color":"#9a3412","group":"diver"},
+                {"code":"buffle","name":"Bufflehead","color":"#2563eb","group":"diver"},
+                {"code":"norsho","name":"Northern Shoveler","color":"#15803d","group":"dabbler"},
+                {"code":"pibgre","name":"Pied-billed Grebe","color":"#854d0e","group":"other"},
+                {"code":"gnwtea","name":"Green-winged Teal","color":"#0f766e","group":"dabbler"},
+                {"code":"buwtea","name":"Blue-winged Teal","color":"#0284c7","group":"dabbler"},
+                {"code":"rinduc","name":"Ring-necked Duck","color":"#4338ca","group":"diver"},
+                {"code":"comgol","name":"Common Goldeneye","color":"#b45309","group":"diver"},
+                {"code":"lessca","name":"Lesser Scaup","color":"#475569","group":"diver"},
+                {"code":"gresca","name":"Greater Scaup","color":"#1e3a8a","group":"diver"},
+                {"code":"amewig","name":"American Wigeon","color":"#be123c","group":"dabbler"},
+                {"code":"gadwal","name":"Gadwall","color":"#4d7c0f","group":"dabbler"},
+                {"code":"canvas","name":"Canvasback","color":"#b91c1c","group":"diver"},
+                {"code":"redhea","name":"Redhead","color":"#ea580c","group":"diver"},
+                {"code":"y00475","name":"American Coot","color":"#111827","group":"other"},
+                {"code":"horgre","name":"Horned Grebe","color":"#a21caf","group":"other"},
+                {"code":"rengre","name":"Red-necked Grebe","color":"#9f1239","group":"other"},
+                {"code":"comloo","name":"Common Loon","color":"#0891b2","group":"other"}
+              ]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +106,10 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --upgrade pip
-          pip install requests folium
+          pip install requests folium pyyaml
+
+      - name: Validate target map behavior
+        run: python -m unittest discover -s tests -v
 
       - name: Ensure target directories exist
         run: |
@@ -88,6 +126,8 @@ jobs:
           BACK_DAYS: ${{ matrix.target.back_days }}
           OUTPUT_DIR: ${{ matrix.target.output_dir }}
           TARGET_SPECIES_JSON: ${{ matrix.target.species_json }}
+          RING_KMS: ${{ matrix.target.ring_kms }}
+          MAP_NOTE: ${{ matrix.target.note }}
         run: |
           set -euxo pipefail
           python scripts/fetch_target_species.py
@@ -182,6 +222,7 @@ jobs:
                   "distKm": int(target.get("dist_km")),
                   "backDays": int(target.get("back_days")),
                   "species": species,
+                  "note": str(target.get("note") or ""),
               })
 
           docs_targets = pathlib.Path("docs/targets")
@@ -200,12 +241,14 @@ jobs:
                   species_items.append(
                       f"<li><span class='swatch' style='background:{color}'></span><span>{name}</span></li>"
                   )
+              note_html = f'<p class="meta">{esc(target["note"])}</p>' if target["note"] else ""
               cards.append(f"""
                 <article class="target-card">
                   <a class="target-link" href="{esc(target['url'])}">
                     <h2>{esc(target['title'])}</h2>
                     <p class="meta">{esc(target['distKm'])} km search radius · last {esc(target['backDays'])} days</p>
                   </a>
+                  {note_html}
                   <ul class="species-list">{''.join(species_items)}</ul>
                 </article>
               """)
@@ -364,6 +407,7 @@ jobs:
           </body>
           </html>
           """
+          html_text = "\n".join(line.rstrip() for line in html_text.splitlines()) + "\n"
           (docs_targets / "index.html").write_text(html_text, encoding="utf-8")
           print(f"Wrote docs/targets/targets.json with {len(out)} targets")
           print("Wrote docs/targets/index.html")
