@@ -67,7 +67,7 @@ The **North Cambridge MA & Vicinity Weird Ducks*** map is at
 the target index. It includes all 20 agreed species (the earlier planning total
 of 22 was a counting error). It uses the regular North Cambridge center
 (42.400973, -71.135970), 10 km search radius, 1/5/10 km rings, and starting zoom 11.
-The lookback is three days; updates share the target workflow's 09:30 and 18:30 UTC
+The lookback is two days; updates share the target workflow's 09:30 and 18:30 UTC
 schedule (5:30 AM/2:30 PM EDT; 4:30 AM/1:30 PM EST). Scheduled starts may be delayed.
 
 *Not all ducks: a selection of waterbirds found on inland waters in fall and winter.*

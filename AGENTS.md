@@ -53,7 +53,7 @@ Read `README.md` and `enhancements.txt` before work. Use this checkout at
 - Optional species `group` values (`dabbler`, `diver`, `merganser`, `other`) select
   icons. Existing targets retain their circle icons. `RING_KMS` and `MAP_NOTE`
   pass explicit rings and explanatory text from the target workflow into data.
-- Target updates run at 09:30 and 18:30 UTC, with a three-day lookback for the
+- Target updates run at 09:30 and 18:30 UTC, with a two-day lookback for the
   Weird Ducks map. Failed species requests must not overwrite prior observations.
 
 ## Credentials and posting

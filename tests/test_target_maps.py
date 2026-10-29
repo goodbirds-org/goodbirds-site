@@ -64,7 +64,7 @@ class TargetMapTests(unittest.TestCase):
         target = target_config()
         env = {"EBIRD_API_KEY": "test-key", "CENTER_LAT": target["center_lat"],
                "CENTER_LNG": target["center_lng"], "DIST_KM": target["dist_km"],
-               "BACK_DAYS": "3", "RING_KMS": target["ring_kms"], "MAP_NOTE": target["note"],
+               "BACK_DAYS": target["back_days"], "RING_KMS": target["ring_kms"], "MAP_NOTE": target["note"],
                "OUTPUT_DIR": directory, "TARGET_SPECIES_JSON": target["species_json"]}
         with patch.dict(os.environ, env), patch("requests.get", return_value=response, side_effect=side_effect) as get:
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -84,6 +84,8 @@ class TargetMapTests(unittest.TestCase):
         self.assertIn("Not all ducks", data["note"])
         self.assertNotIn("pending", data.values())
         self.assertEqual(get.call_args.kwargs["params"]["dist"], 10)
+        self.assertEqual(get.call_args.kwargs["params"]["back"], 2)
+        self.assertEqual(data["backDays"], 2)
 
     def test_failed_fetch_does_not_replace_existing_data(self):
         with tempfile.TemporaryDirectory() as directory:
