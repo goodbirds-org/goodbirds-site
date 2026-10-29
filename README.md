@@ -38,6 +38,20 @@ URL:
 
 This map is built by `scripts/build_mega_map.py` and the `.github/workflows/build-mega.yml` workflow.
 
+The mega map uses the official **eBird taxonomy 2026** CSV and **ABA Checklist
+8.19 (January 2026)**. eBird provides species identities and codes; ABA provides
+rarity classifications. Source URLs, hashes and normalization details are in
+[scripts/data/README.md](scripts/data/README.md) and `taxonomy_sources.json`.
+
+The update matches 124 Code 4 and 150 Code 5 species. Little White-Tern now
+matches `whiter5`. The broader ABA entry `Wandering Albatross (sp.)` remains
+unresolved rather than being assigned Snowy Albatross's species code. Every
+match is recorded in `docs/mega/species_matches.csv`; unresolved names and their
+reasons are in `docs/mega/unresolved_names.csv`. Matching now prevents subspecies
+entries from overwriting species-level names. Zero-sighting builds also produce
+a valid map page.
+
+
 ### Target Species Maps
 
 Target Species Maps are focused maps for selected species in selected places. They are separate from the regular city notable-birds maps.
@@ -74,7 +88,7 @@ schedule (5:30 AM/2:30 PM EDT; 4:30 AM/1:30 PM EST). Scheduled starts may be del
 Species colors are paired with icons for dabblers, divers, mergansers and other
 waterbirds. These are display groups rather than strict taxonomic families.
 Codes were checked against the [official eBird taxonomy API](https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json)
-on October 26, 2026; the repository's taxonomy inputs were not replaced.
+on October 26, 2026. The mega map's taxonomy input was updated to 2026 on October 29.
 
 Each target location popup includes every distinct checklist associated with
 retrieved sightings, grouped by species and showing observation dates and counts
@@ -281,7 +295,7 @@ For mega builds, use the command below as a single PowerShell line after setting
 the API key and any desired `MEGA_*` values:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/build_mega_map.py --aba_csv scripts/data/ABA_Checklist.csv --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv --out_dir .local-preview/mega --codes 4,5
+.\.venv\Scripts\python.exe scripts/build_mega_map.py --aba_csv scripts/data/ABA_Checklist.csv --taxonomy_csv scripts/data/eBird_taxonomy_v2026.csv --out_dir .local-preview/mega --codes 4,5
 ```
 
 For target-data builds, copy the selected target's matrix settings into the
@@ -382,7 +396,7 @@ export MEGA_PER_SPECIES_MAX="0"
 
 python scripts/build_mega_map.py \
   --aba_csv scripts/data/ABA_Checklist.csv \
-  --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv \
+  --taxonomy_csv scripts/data/eBird_taxonomy_v2026.csv \
   --out_dir docs/mega \
   --codes 4,5
 ```

@@ -2,6 +2,7 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -119,31 +120,34 @@ def load_allowed_species_codes(
         print("[error] ABA or taxonomy CSV not found", file=sys.stderr)
         sys.exit(3)
 
-    with taxonomy_csv.open(encoding="utf-8", errors="replace") as f:
+    with taxonomy_csv.open(encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         tax_rows = list(reader)
 
     tax_header = list(tax_rows[0].keys()) if tax_rows else []
-    name_cand = None
-    for cand in ["PRIMARY_COM_NAME","PRIMARY COM NAME","ENGLISH_NAME","English Name","Common Name"]:
-        if cand in tax_header:
-            name_cand = cand
-            break
-    spc_col = "SPECIES_CODE"
-    if name_cand is None or spc_col not in tax_header:
-        upper_map = {c.upper(): c for c in tax_header}
-        name_cand = upper_map.get("PRIMARY_COM_NAME") or upper_map.get("ENGLISH_NAME")
-        spc_col = upper_map.get("SPECIES_CODE", spc_col)
-        if not name_cand or not spc_col:
-            print("[error] Could not find taxonomy columns", file=sys.stderr)
-            sys.exit(3)
+    upper_map = {c.strip().upper(): c for c in tax_header}
+    name_cand = next((upper_map[c] for c in ["COMMON_NAME", "PRIMARY_COM_NAME", "PRIMARY COM NAME",
+                                           "ENGLISH_NAME", "ENGLISH NAME", "COMMON NAME"] if c in upper_map), None)
+    spc_col = upper_map.get("SPECIES_CODE")
+    scientific_col = upper_map.get("SCIENTIFIC_NAME") or upper_map.get("SCIENTIFIC NAME")
+    category_col = upper_map.get("CATEGORY")
+    if not name_cand or not spc_col:
+        print("[error] Could not find taxonomy common-name and SPECIES_CODE columns", file=sys.stderr)
+        sys.exit(3)
 
-    name_to_code = {}
+    # Never let a subspecies, hybrid or slash entry overwrite a species name
+    # after normalization strips parenthetical text.
+    by_name = defaultdict(list)
+    by_scientific = defaultdict(list)
     for r in tax_rows:
+        if category_col and r.get(category_col, "").strip().lower() != "species":
+            continue
         nm = normalize_name(r.get(name_cand))
         sc = (r.get(spc_col) or "").strip().lower()
         if nm and sc:
-            name_to_code[nm] = sc
+            by_name[nm].append(r)
+            if scientific_col:
+                by_scientific[normalize_name(r.get(scientific_col))].append(r)
 
     raw = aba_csv.read_text(encoding="utf-8", errors="replace").splitlines()
     header_idx = None
@@ -171,6 +175,7 @@ def load_allowed_species_codes(
     rdr = csv.DictReader(raw[header_idx:], delimiter=delim)
     code_col = detect_column(rdr.fieldnames, ABA_CODE_KEYS) or next(iter(rdr.fieldnames), None)
     name_col = detect_column(rdr.fieldnames, ABA_NAME_KEYS)
+    aba_scientific_col = detect_column(rdr.fieldnames, {"scientific name", "scientific_name"})
     if not code_col or not name_col:
         print(f"[error] Could not detect ABA columns. Header: {rdr.fieldnames}", file=sys.stderr)
         sys.exit(3)
@@ -178,6 +183,7 @@ def load_allowed_species_codes(
     per_code_map: Dict[int, Set[str]] = {c: set() for c in target_codes}
     code_matcher = re.compile(r"^\s*(\d)\b")
     unresolved = []
+    matches = []
 
     for r in rdr:
         raw_code = str(r.get(code_col, "")).strip()
@@ -188,15 +194,27 @@ def load_allowed_species_codes(
         if code_val not in target_codes:
             continue
         nm = r.get(name_col)
-        sc = None
-        for v in expand_variants(nm):
-            sc = name_to_code.get(v)
-            if sc:
-                break
-        if sc:
+        scientific = r.get(aba_scientific_col, "") if aba_scientific_col else ""
+        candidates = {}
+        method = "common_name"
+        # ABA's Wandering Albatross (sp.) is a broader identification than
+        # eBird's Snowy Albatross. Do not silently assign it that species' code.
+        aggregate = bool(re.search(r"\bsp\.", f"{nm} {scientific}", re.I))
+        if not aggregate:
+            for v in expand_variants(nm):
+                for taxon in by_name.get(v, []):
+                    candidates[taxon[spc_col].strip().lower()] = taxon
+            if not candidates and scientific:
+                method = "scientific_name"
+                for taxon in by_scientific.get(normalize_name(scientific), []):
+                    candidates[taxon[spc_col].strip().lower()] = taxon
+        if len(candidates) == 1:
+            sc, taxon = next(iter(candidates.items()))
             per_code_map[code_val].add(sc)
+            matches.append([nm, scientific, code_val, sc, taxon[name_cand], method])
         else:
-            unresolved.append(nm)
+            reason = "aggregate identification" if aggregate else "ambiguous species match" if candidates else "no species match"
+            unresolved.append([nm, scientific, reason])
 
     out_dir.mkdir(parents=True, exist_ok=True)
     allowed: Set[str] = set()
@@ -209,11 +227,16 @@ def load_allowed_species_codes(
         (out_dir / "aba5.json").write_text(json.dumps(sorted(per_code_map[5]), indent=2), encoding="utf-8")
 
     counts = {c: len(per_code_map[c]) for c in sorted(target_codes)}
-    if unresolved:
-        with (out_dir / "unresolved_names.csv").open("w", encoding="utf-8", newline="") as f:
-            w = csv.writer(f); w.writerow(["UNRESOLVED_COMMON_NAME"])
-            for nm in sorted(set(unresolved)):
-                w.writerow([nm])
+    # Always replace diagnostics, including a header-only unresolved file, so
+    # names resolved by an update cannot linger from the previous build.
+    with (out_dir / "unresolved_names.csv").open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["UNRESOLVED_COMMON_NAME", "SCIENTIFIC_NAME", "REASON"])
+        w.writerows(sorted(unresolved))
+    with (out_dir / "species_matches.csv").open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["ABA_COMMON_NAME", "ABA_SCIENTIFIC_NAME", "ABA_CODE", "SPECIES_CODE", "EBIRD_COMMON_NAME", "MATCH_METHOD"])
+        w.writerows(sorted(matches))
     return allowed, counts
 
 # --------------------- eBird fetching ---------------------
@@ -460,8 +483,8 @@ def build_map_html(out_dir: Path, points: List[dict], code4: Set[str], code5: Se
         folium.Marker([lat, lng], icon=icon, tooltip=com_name,
                       popup=folium.Popup(popup_html, max_width=320)).add_to(cluster)
 
-        out_path = out_dir / "index.html"
-        m.save(str(out_path))
+    out_path = out_dir / "index.html"
+    m.save(str(out_path))
 
     # Inject Google Analytics snippet before </body>
     try:
@@ -537,6 +560,8 @@ def main():
     html_path = build_map_html(out_dir, points, code4_set, code5_set, back_recent, args.map_title)
 
     summary = {
+        "taxonomy_csv": Path(args.taxonomy_csv).name,
+        "aba_csv": Path(args.aba_csv).name,
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         "recent_days": back_recent,
         "national_max": national_max,
@@ -549,6 +574,17 @@ def main():
         "count_megas": len(points),
         "html_bytes": html_path.stat().st_size if html_path.exists() else 0,
     }
+    with (out_dir / "unresolved_names.csv").open(encoding="utf-8", newline="") as f:
+        summary["unresolved_names"] = [r["UNRESOLVED_COMMON_NAME"] for r in csv.DictReader(f)]
+    provenance_path = Path(args.taxonomy_csv).with_name("taxonomy_sources.json")
+    if provenance_path.exists():
+        sources = json.loads(provenance_path.read_text(encoding="utf-8"))
+        # Hash canonical UTF-8/LF text so Git's Windows line-ending conversion
+        # does not prevent identifying the same input on the Linux runner.
+        if hashlib.sha256(Path(args.taxonomy_csv).read_text(encoding="utf-8").encode("utf-8")).hexdigest() == sources.get("ebird", {}).get("sha256"):
+            summary["taxonomy_version"] = sources["ebird"]["version"]
+        if hashlib.sha256(Path(args.aba_csv).read_text(encoding="utf-8").encode("utf-8")).hexdigest() == sources.get("aba", {}).get("normalized_sha256"):
+            summary["aba_checklist_version"] = sources["aba"]["version"]
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     txt = html_path.read_text(encoding="utf-8", errors="ignore")

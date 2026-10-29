@@ -52,11 +52,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests folium jq
 
+      - name: Validate mega taxonomy matching
+        run: python -m unittest discover -s tests -p "test_mega_map.py" -v
+
       - name: Ensure data inputs exist
         run: |
           set -euxo pipefail
           test -f scripts/data/ABA_Checklist.csv
-          test -f scripts/data/eBird_taxonomy_v2024.csv
+          test -f scripts/data/eBird_taxonomy_v2026.csv
           mkdir -p docs/mega
 
       - name: Verify ABA-5 list exists
@@ -76,7 +79,7 @@ jobs:
           set -euxo pipefail
           python scripts/build_mega_map.py \
             --aba_csv scripts/data/ABA_Checklist.csv \
-            --taxonomy_csv scripts/data/eBird_taxonomy_v2024.csv \
+            --taxonomy_csv scripts/data/eBird_taxonomy_v2026.csv \
             --out_dir docs/mega \
             --codes 4,5
           echo "----- SUMMARY -----"
@@ -104,7 +107,9 @@ jobs:
           name: mega-diagnostics
           path: |
             docs/mega/aba5.json
-            docs/mega/aba5_unresolved.json
+            docs/mega/aba4.json
+            docs/mega/aba_allowed.json
+            scripts/data/taxonomy_sources.json
             docs/mega/summary.json
             docs/mega/index.html
             docs/mega/*.csv

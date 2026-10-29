@@ -12,7 +12,7 @@ Read `README.md` and `enhancements.txt` before work. Use this checkout at
 - Coverage: `scripts/make_cities_json.py` reads that city matrix and writes
   `docs/cities.json` and `docs/cities_map.html`.
 - Mega map: `scripts/build_mega_map.py`, `.github/workflows/build-mega.yml`,
-  `scripts/data/ABA_Checklist.csv`, and `scripts/data/eBird_taxonomy_v2024.csv`.
+  `scripts/data/ABA_Checklist.csv`, and `scripts/data/eBird_taxonomy_v2026.csv`.
 - Targets: `scripts/fetch_target_species.py` fetches observations;
   `scripts/build_target_map_page.py` renders pages. Target configuration and
   index templates live in `.github/workflows/build-target-species.yml`.
@@ -43,7 +43,7 @@ Read `README.md` and `enhancements.txt` before work. Use this checkout at
   relative to the current directory, so run it from a scratch directory with an
   absolute `GOODBIRDS_WORKFLOW_YAML` to avoid changing published files.
 - Run `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` for target-map
-  changes. Validate Python syntax, YAML,
+  or mega-map changes. Validate Python syntax, YAML,
   JSON, matrix/output consistency, and relevant generated pages for each change.
   Browser-check visual or interactive changes. Do not treat file checks as proof
   of live API access, successful CI, or correct GitHub Pages settings.
@@ -77,7 +77,13 @@ Read `README.md` and `enhancements.txt` before work. Use this checkout at
   Use an eBird CSV with `SPECIES_CODE`; ABA rarity codes are a separate input.
   An existing weekly taxonomy reminder must not be duplicated.
 - After taxonomy changes, rebuild mega outputs and inspect species-code
-  matching, summary and unresolved names. Current unresolved names are
-  `Little White-Tern` and `Wandering Albatross (sp.)`.
+  matching, summary and unresolved names. Current counts are 124 Code 4 and
+  150 Code 5 species. `Little White-Tern` resolves as `whiter5`;
+  `Wandering Albatross (sp.)` remains unresolved as a broad identification.
+  `docs/mega/species_matches.csv` records every match. Input versions, sources
+  and hashes are in `scripts/data/taxonomy_sources.json`.
+- Match species-level eBird entries only: ISSF/hybrid/slash names must not
+  overwrite a species after parenthetical name normalization. The official
+  eBird 2026 CSV uses `COMMON_NAME` and `SCIENTIFIC_NAME`.
 - Do not refresh live observations or publish social posts merely to validate
   documentation/setup changes.
