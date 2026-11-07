@@ -19,7 +19,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_f3c1d8b14333b7e56e66b86f07ce451f {
+                #map_f8014bdb9445f2f0304279fd980506db {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -58,6 +58,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.66.2/L.Control.Locate.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
 </head>
 <body>
     
@@ -105,7 +108,7 @@
         <div>
           <h3 class="gb-info-title">Estero, FL & Vicinity</h3>
           <div class="gb-info-meta">eBird Notable · 20 km radius · last 2 day(s)</div>
-          <div class="gb-info-row"><span>Built: Nov 07, 2026 01:56 AM EST</span></div>
+          <div class="gb-info-row"><span>Built: Nov 07, 2026 03:11 PM EST</span></div>
         </div>
       </div>
     </div>
@@ -122,16 +125,9 @@
     </script>
     
     
-    <div style="
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
-      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    ">No current notable birds for the selected window.</div>
-    
-    
     <script>
     (function(){
-      var speciesSet = new Set([]);
+      var speciesSet = new Set(['Eastern Wood-Pewee', "Swainson's Hawk", 'Tennessee Warbler']);
       function clearSpecies(){
         var root = document.querySelector('.leaflet-control-layers-overlays');
         if (!root) return;
@@ -156,14 +152,63 @@
       });
       function addWhenReady(){
         if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
-        (new ClearCtl({position:'topright'})).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+        (new ClearCtl({position:'topright'})).addTo(map_f8014bdb9445f2f0304279fd980506db);
       }
       addWhenReady();
     })();
     </script>
     
     
-            <div class="folium-map" id="map_f3c1d8b14333b7e56e66b86f07ce451f" ></div>
+    <script>
+    (function(){
+      var colorMap = {'Eastern Wood-Pewee': '#2232c3', "Swainson's Hawk": '#c3229d', 'Tennessee Warbler': '#9822c3'};
+
+      function decorate(){
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){
+            if(root.style.display==='none'){ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }
+            else { root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }
+          });
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        });
+        return true;
+      }
+
+      function whenReady(){ if(!decorate()) setTimeout(whenReady,200); }
+      whenReady();
+    })();
+    </script>
+    
+    
+            <div class="folium-map" id="map_f8014bdb9445f2f0304279fd980506db" ></div>
         
 
 <!-- Google tag (gtag.js) -->
@@ -179,8 +224,8 @@
 <script>
     
     
-            var map_f3c1d8b14333b7e56e66b86f07ce451f = L.map(
-                "map_f3c1d8b14333b7e56e66b86f07ce451f",
+            var map_f8014bdb9445f2f0304279fd980506db = L.map(
+                "map_f8014bdb9445f2f0304279fd980506db",
                 {
                     center: [26.433947, -81.815317],
                     crs: L.CRS.EPSG3857,
@@ -192,13 +237,13 @@
 
                 }
             );
-            L.control.scale().addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            L.control.scale().addTo(map_f8014bdb9445f2f0304279fd980506db);
 
             
 
         
     
-            var tile_layer_c756c3087562bb60a348b547beaa2fdf = L.tileLayer(
+            var tile_layer_87945938c1f92070ee0509a1e4d1e154 = L.tileLayer(
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -215,16 +260,16 @@
             );
         
     
-            tile_layer_c756c3087562bb60a348b547beaa2fdf.addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            tile_layer_87945938c1f92070ee0509a1e4d1e154.addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var circle_marker_99d471a9162416830a067391a2b30140 = L.circleMarker(
+            var circle_marker_d1edb2e37f11d22e89bf287e362f5427 = L.circleMarker(
                 [26.433947, -81.815317],
                 {"bubblingMouseEvents": true, "color": "#2c7fb8", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2c7fb8", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4, "stroke": true, "weight": 3}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            circle_marker_99d471a9162416830a067391a2b30140.bindTooltip(
+            circle_marker_d1edb2e37f11d22e89bf287e362f5427.bindTooltip(
                 `<div>
                      Center
                  </div>`,
@@ -234,92 +279,92 @@
             );
         
     
-            var circle_b410ac021cf1bb8f93e52b193e7feb15 = L.circle(
+            var circle_6d230078a93359255af89b1f177d7882 = L.circle(
                 [26.433947, -81.815317],
                 {"bubblingMouseEvents": true, "color": "#666666", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#666666", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 5000.0, "stroke": true, "weight": 2}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var marker_9a576a48d7dc0c9cf8e7632e760ca1f9 = L.marker(
+            var marker_6e2d841cf5782f1bb2cd7189ea3feefa = L.marker(
                 [26.478992045045047, -81.815317],
                 {
 }
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var div_icon_70ab897b25e051d3eb809a57c3898aad = L.divIcon({
+            var div_icon_88f13ad791b94adb0e58e5ef12ab5e0f = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#666666;\u0027\u003e5 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_9a576a48d7dc0c9cf8e7632e760ca1f9.setIcon(div_icon_70ab897b25e051d3eb809a57c3898aad);
+                marker_6e2d841cf5782f1bb2cd7189ea3feefa.setIcon(div_icon_88f13ad791b94adb0e58e5ef12ab5e0f);
             
     
-            var circle_6555d5355eed3e58c9728eec534b25b1 = L.circle(
+            var circle_cc03eb554fc2d5ce102be408c0b07deb = L.circle(
                 [26.433947, -81.815317],
                 {"bubblingMouseEvents": true, "color": "#555555", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#555555", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 10000.0, "stroke": true, "weight": 2}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var marker_8c36760b8f6e6f2dd34d28ad51168361 = L.marker(
+            var marker_6fcfbc9153eecf92892f70c677985dd1 = L.marker(
                 [26.52403709009009, -81.815317],
                 {
 }
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var div_icon_195f851d1219e4770c2515804b8dc8ff = L.divIcon({
+            var div_icon_f8d6ed6e4c11e7dff976e70768c92ca7 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#555555;\u0027\u003e10 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_8c36760b8f6e6f2dd34d28ad51168361.setIcon(div_icon_195f851d1219e4770c2515804b8dc8ff);
+                marker_6fcfbc9153eecf92892f70c677985dd1.setIcon(div_icon_f8d6ed6e4c11e7dff976e70768c92ca7);
             
     
-            var circle_1046e76696aa0f6bf6639a54ee91ed3e = L.circle(
+            var circle_1659a3da1169a879c8c782db2ae47854 = L.circle(
                 [26.433947, -81.815317],
                 {"bubblingMouseEvents": true, "color": "#444444", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#444444", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 15000.0, "stroke": true, "weight": 2}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var marker_57fccfc5ae93be3fddfa8050169aa955 = L.marker(
+            var marker_3eb7678b34fcde4008d0699e1721653e = L.marker(
                 [26.569082135135137, -81.815317],
                 {
 }
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var div_icon_7caf19d3347ec6ad84c6c20ccdc4c629 = L.divIcon({
+            var div_icon_d18059463da25d91cfc6613dae3a9001 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#444444;\u0027\u003e15 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_57fccfc5ae93be3fddfa8050169aa955.setIcon(div_icon_7caf19d3347ec6ad84c6c20ccdc4c629);
+                marker_3eb7678b34fcde4008d0699e1721653e.setIcon(div_icon_d18059463da25d91cfc6613dae3a9001);
             
     
-            var circle_e99ad69d1cb6a68399bcae4074cf7f82 = L.circle(
+            var circle_b42af3c3852d21dc7b2564e0fbd6fbc2 = L.circle(
                 [26.433947, -81.815317],
                 {"bubblingMouseEvents": true, "color": "#08519c", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#08519c", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 20000.0, "stroke": true, "weight": 3}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var marker_3d909108346087871996a9f12dec68e8 = L.marker(
+            var marker_7aca494dd05ad00e6fe2df571478b990 = L.marker(
                 [26.61412718018018, -81.815317],
                 {
 }
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var div_icon_d22d9b8599581ed328a18b0195701cf8 = L.divIcon({
+            var div_icon_6468cc32dddb190b02b8852c43b84bb0 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#08519c; font-weight:bold;\u0027\u003e20 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_3d909108346087871996a9f12dec68e8.setIcon(div_icon_d22d9b8599581ed328a18b0195701cf8);
+                marker_7aca494dd05ad00e6fe2df571478b990.setIcon(div_icon_6468cc32dddb190b02b8852c43b84bb0);
             
     
             L.control.fullscreen(
@@ -329,16 +374,16 @@
   "titleCancel": "Exit Full Screen",
   "forceSeparateButton": false,
 }
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
         
     
-            var locate_control_d025ac1e6deb00551f13fba94b0dc6f2 = L.control.locate(
+            var locate_control_381b5fc8d3e7dad4f965147faca6fa9c = L.control.locate(
                 {"keepCurrentZoomLevel": false}
-            ).addTo(map_f3c1d8b14333b7e56e66b86f07ce451f);
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
             
         
     
-            var mouse_position_5d3c80273dd80c77c9c36be1e02e05a5 = new L.Control.MousePosition(
+            var mouse_position_131e2bd861ddef83969f2992715ebbb3 = new L.Control.MousePosition(
                 {
   "position": "bottomright",
   "separator": " , ",
@@ -348,11 +393,312 @@
   "prefix": "Lat, Lon:",
 }
             );
-            mouse_position_5d3c80273dd80c77c9c36be1e02e05a5.options["latFormatter"] =
+            mouse_position_131e2bd861ddef83969f2992715ebbb3.options["latFormatter"] =
                 undefined;
-            mouse_position_5d3c80273dd80c77c9c36be1e02e05a5.options["lngFormatter"] =
+            mouse_position_131e2bd861ddef83969f2992715ebbb3.options["lngFormatter"] =
                 undefined;
-            map_f3c1d8b14333b7e56e66b86f07ce451f.addControl(mouse_position_5d3c80273dd80c77c9c36be1e02e05a5);
+            map_f8014bdb9445f2f0304279fd980506db.addControl(mouse_position_131e2bd861ddef83969f2992715ebbb3);
+        
+    
+            var feature_group_b4975fa8c29d8d31d5f47476d05e09bf = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_0673f2e376aaa59345f04c1a460baff0 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_0d14335ebae0f848ec372798a9ccf673 = L.marker(
+                [26.473819, -81.822709],
+                {
+}
+            ).addTo(marker_cluster_0673f2e376aaa59345f04c1a460baff0);
+        
+    
+            var div_icon_a63d67f950bb89ce8de96081b3f30eee = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#2232c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_b435bf11f21dcbb44449ad2138b7660f = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_bb1275cd4bda71081b89a4bc5b24b9a0 = $(`<div id="html_bb1275cd4bda71081b89a4bc5b24b9a0" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Eastern Wood-Pewee</b></div><div><b>Location:</b> San Carlos Park--Hilda House</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408705642' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:14 (1)</li></ul></div></div>`)[0];
+                popup_b435bf11f21dcbb44449ad2138b7660f.setContent(html_bb1275cd4bda71081b89a4bc5b24b9a0);
+            
+        
+
+        marker_0d14335ebae0f848ec372798a9ccf673.bindPopup(popup_b435bf11f21dcbb44449ad2138b7660f)
+        ;
+
+        
+    
+    
+            marker_0d14335ebae0f848ec372798a9ccf673.bindTooltip(
+                `<div>
+                     Eastern Wood-Pewee
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_0d14335ebae0f848ec372798a9ccf673.setIcon(div_icon_a63d67f950bb89ce8de96081b3f30eee);
+            
+    
+            marker_cluster_0673f2e376aaa59345f04c1a460baff0.addTo(feature_group_b4975fa8c29d8d31d5f47476d05e09bf);
+        
+    
+            feature_group_b4975fa8c29d8d31d5f47476d05e09bf.addTo(map_f8014bdb9445f2f0304279fd980506db);
+        
+    
+            var feature_group_903d6f63bb954a22c4d446d94613a602 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_95a2d807d70e79087624a4b1f134be74 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_14fada86e5058eb483ca9c1c0592433d = L.marker(
+                [26.5284165, -81.8768549],
+                {
+}
+            ).addTo(marker_cluster_95a2d807d70e79087624a4b1f134be74);
+        
+    
+            var div_icon_df0d4efadab36ad21df79d28b9b136f9 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3229d;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_5383dc58e2ae1ec3b4647dee25b6b5ba = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6317ecda9a8e32c4d0d2a217ba8777ac = $(`<div id="html_6317ecda9a8e32c4d0d2a217ba8777ac" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Swainson's Hawk</b></div><div><b>Location:</b> Lakes Regional Park Bird Tour</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408661986' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 08:20 (1)</li><li><a href='https://ebird.org/checklist/S408708620' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 08:00 (1)</li></ul></div></div>`)[0];
+                popup_5383dc58e2ae1ec3b4647dee25b6b5ba.setContent(html_6317ecda9a8e32c4d0d2a217ba8777ac);
+            
+        
+
+        marker_14fada86e5058eb483ca9c1c0592433d.bindPopup(popup_5383dc58e2ae1ec3b4647dee25b6b5ba)
+        ;
+
+        
+    
+    
+            marker_14fada86e5058eb483ca9c1c0592433d.bindTooltip(
+                `<div>
+                     Swainson's Hawk
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_14fada86e5058eb483ca9c1c0592433d.setIcon(div_icon_df0d4efadab36ad21df79d28b9b136f9);
+            
+    
+            var marker_fb2cb6f561600244e9ba0dc41145888b = L.marker(
+                [26.5271649, -81.8765643],
+                {
+}
+            ).addTo(marker_cluster_95a2d807d70e79087624a4b1f134be74);
+        
+    
+            var div_icon_6bfdb2a01b505851a110bc33cb3517ff = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3229d;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_b46a60d2460aeac4b117861ed0dfe1ad = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_75d1b7dfac84589778c7628af6bb88b2 = $(`<div id="html_75d1b7dfac84589778c7628af6bb88b2" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Swainson's Hawk</b></div><div><b>Location:</b> Lakes Park</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408652411' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 08:04 (1)</li></ul></div></div>`)[0];
+                popup_b46a60d2460aeac4b117861ed0dfe1ad.setContent(html_75d1b7dfac84589778c7628af6bb88b2);
+            
+        
+
+        marker_fb2cb6f561600244e9ba0dc41145888b.bindPopup(popup_b46a60d2460aeac4b117861ed0dfe1ad)
+        ;
+
+        
+    
+    
+            marker_fb2cb6f561600244e9ba0dc41145888b.bindTooltip(
+                `<div>
+                     Swainson's Hawk
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_fb2cb6f561600244e9ba0dc41145888b.setIcon(div_icon_6bfdb2a01b505851a110bc33cb3517ff);
+            
+    
+            var marker_3b173235c2ec69b9a446eeb32fcb4767 = L.marker(
+                [26.527812, -81.876104],
+                {
+}
+            ).addTo(marker_cluster_95a2d807d70e79087624a4b1f134be74);
+        
+    
+            var div_icon_2fe20f8e80548e5d6a330a22533f74c3 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3229d;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_b1de67b2163535ad33c0d3048713b873 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_8ed1cf964a94f870afb12ebd69c822c5 = $(`<div id="html_8ed1cf964a94f870afb12ebd69c822c5" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Swainson's Hawk</b></div><div><b>Location:</b> Lakes Regional Park, Fort Myers US-FL 26.52781, -81.87610</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408656804' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 07:36 (1)</li></ul></div></div>`)[0];
+                popup_b1de67b2163535ad33c0d3048713b873.setContent(html_8ed1cf964a94f870afb12ebd69c822c5);
+            
+        
+
+        marker_3b173235c2ec69b9a446eeb32fcb4767.bindPopup(popup_b1de67b2163535ad33c0d3048713b873)
+        ;
+
+        
+    
+    
+            marker_3b173235c2ec69b9a446eeb32fcb4767.bindTooltip(
+                `<div>
+                     Swainson's Hawk
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_3b173235c2ec69b9a446eeb32fcb4767.setIcon(div_icon_2fe20f8e80548e5d6a330a22533f74c3);
+            
+    
+            marker_cluster_95a2d807d70e79087624a4b1f134be74.addTo(feature_group_903d6f63bb954a22c4d446d94613a602);
+        
+    
+            feature_group_903d6f63bb954a22c4d446d94613a602.addTo(map_f8014bdb9445f2f0304279fd980506db);
+        
+    
+            var feature_group_4a2e9f474c9779a91891118d973b1b12 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_ee7d52e1fd391cf8943363c59a3b99bb = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_35acb41c60d5dce0cbe2a0082ce943bd = L.marker(
+                [26.473819, -81.822709],
+                {
+}
+            ).addTo(marker_cluster_ee7d52e1fd391cf8943363c59a3b99bb);
+        
+    
+            var div_icon_c1e0d70ee1e034897ff7849b9945c816 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#9822c3;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_2fc538fc06e777a90da784cd5acaf733 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_79d02046d6c153d025619dbd252e27f1 = $(`<div id="html_79d02046d6c153d025619dbd252e27f1" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Tennessee Warbler</b></div><div><b>Location:</b> San Carlos Park--Hilda House</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408705642' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:14 (1)</li></ul></div></div>`)[0];
+                popup_2fc538fc06e777a90da784cd5acaf733.setContent(html_79d02046d6c153d025619dbd252e27f1);
+            
+        
+
+        marker_35acb41c60d5dce0cbe2a0082ce943bd.bindPopup(popup_2fc538fc06e777a90da784cd5acaf733)
+        ;
+
+        
+    
+    
+            marker_35acb41c60d5dce0cbe2a0082ce943bd.bindTooltip(
+                `<div>
+                     Tennessee Warbler
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_35acb41c60d5dce0cbe2a0082ce943bd.setIcon(div_icon_c1e0d70ee1e034897ff7849b9945c816);
+            
+    
+            marker_cluster_ee7d52e1fd391cf8943363c59a3b99bb.addTo(feature_group_4a2e9f474c9779a91891118d973b1b12);
+        
+    
+            feature_group_4a2e9f474c9779a91891118d973b1b12.addTo(map_f8014bdb9445f2f0304279fd980506db);
+        
+    
+            var layer_control_b9d6209a8a55cf060681c331def69d6e_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_87945938c1f92070ee0509a1e4d1e154,
+                },
+                overlays :  {
+                    "Eastern Wood-Pewee" : feature_group_b4975fa8c29d8d31d5f47476d05e09bf,
+                    "Swainson\u0027s Hawk" : feature_group_903d6f63bb954a22c4d446d94613a602,
+                    "Tennessee Warbler" : feature_group_4a2e9f474c9779a91891118d973b1b12,
+                },
+            };
+            let layer_control_b9d6209a8a55cf060681c331def69d6e = L.control.layers(
+                layer_control_b9d6209a8a55cf060681c331def69d6e_layers.base_layers,
+                layer_control_b9d6209a8a55cf060681c331def69d6e_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_f8014bdb9445f2f0304279fd980506db);
+
         
 </script>
 </html>
