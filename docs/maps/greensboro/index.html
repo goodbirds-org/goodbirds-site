@@ -19,7 +19,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_505246cbaa15abda355403c3bc4d2428 {
+                #map_a987810f359dcda20487ab3a74e96b92 {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -58,6 +58,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.66.2/L.Control.Locate.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
 </head>
 <body>
     
@@ -105,7 +108,7 @@
         <div>
           <h3 class="gb-info-title">Greensboro, NC & Vicinity</h3>
           <div class="gb-info-meta">eBird Notable · 15 km radius · last 2 day(s)</div>
-          <div class="gb-info-row"><span>Built: Nov 07, 2026 01:50 AM EST</span></div>
+          <div class="gb-info-row"><span>Built: Nov 07, 2026 03:05 PM EST</span></div>
         </div>
       </div>
     </div>
@@ -122,16 +125,9 @@
     </script>
     
     
-    <div style="
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 10px 14px; border: 1px solid #999;
-      border-radius: 6px; z-index: 1500; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    ">No current notable birds for the selected window.</div>
-    
-    
     <script>
     (function(){
-      var speciesSet = new Set([]);
+      var speciesSet = new Set(['American Avocet', 'Lesser Yellowlegs', 'White-eyed Vireo']);
       function clearSpecies(){
         var root = document.querySelector('.leaflet-control-layers-overlays');
         if (!root) return;
@@ -156,14 +152,63 @@
       });
       function addWhenReady(){
         if(!document.querySelector('.leaflet-control-layers')) return setTimeout(addWhenReady,150);
-        (new ClearCtl({position:'topright'})).addTo(map_505246cbaa15abda355403c3bc4d2428);
+        (new ClearCtl({position:'topright'})).addTo(map_a987810f359dcda20487ab3a74e96b92);
       }
       addWhenReady();
     })();
     </script>
     
     
-            <div class="folium-map" id="map_505246cbaa15abda355403c3bc4d2428" ></div>
+    <script>
+    (function(){
+      var colorMap = {'American Avocet': '#c3222f', 'Lesser Yellowlegs': '#c32265', 'White-eyed Vireo': '#c3226d'};
+
+      function decorate(){
+        var ctl = document.querySelector('.leaflet-control-layers');
+        var root = document.querySelector('.leaflet-control-layers-overlays');
+        if(!ctl || !root) return false;
+
+        if(!ctl.querySelector('.gb-layers-head')){
+          var head = document.createElement('div');
+          head.className='gb-layers-head';
+          var title = document.createElement('div'); title.textContent='Species Layers';
+          var btn = document.createElement('button'); btn.className='gb-layer-toggle'; btn.type='button';
+          btn.setAttribute('aria-expanded','true'); btn.textContent='Collapse';
+          btn.addEventListener('click', function(){
+            if(root.style.display==='none'){ root.style.display=''; btn.textContent='Collapse'; btn.setAttribute('aria-expanded','true'); }
+            else { root.style.display='none'; btn.textContent='Expand'; btn.setAttribute('aria-expanded','false'); }
+          });
+          head.appendChild(title); head.appendChild(btn);
+          var form = ctl.querySelector('form') || ctl;
+          form.insertBefore(head, form.firstChild);
+        }
+
+        var labels = root.querySelectorAll('label');
+        labels.forEach(function(label){
+          if(label.querySelector('.gb-swatch')) return;
+          var txt = label.textContent.trim();
+          var color = colorMap[txt];
+          if(!color) return;
+          var input = label.querySelector('input[type=checkbox]');
+          if(!input) return;
+          var sw = document.createElement('span');
+          sw.className='gb-swatch';
+          sw.style.display='inline-block';
+          sw.style.width='12px'; sw.style.height='12px';
+          sw.style.border='1px solid #222'; sw.style.margin='0 6px 0 6px';
+          sw.style.background=color;
+          input.insertAdjacentElement('afterend', sw);
+        });
+        return true;
+      }
+
+      function whenReady(){ if(!decorate()) setTimeout(whenReady,200); }
+      whenReady();
+    })();
+    </script>
+    
+    
+            <div class="folium-map" id="map_a987810f359dcda20487ab3a74e96b92" ></div>
         
 
 <!-- Google tag (gtag.js) -->
@@ -179,8 +224,8 @@
 <script>
     
     
-            var map_505246cbaa15abda355403c3bc4d2428 = L.map(
-                "map_505246cbaa15abda355403c3bc4d2428",
+            var map_a987810f359dcda20487ab3a74e96b92 = L.map(
+                "map_a987810f359dcda20487ab3a74e96b92",
                 {
                     center: [36.094567, -79.78455],
                     crs: L.CRS.EPSG3857,
@@ -192,13 +237,13 @@
 
                 }
             );
-            L.control.scale().addTo(map_505246cbaa15abda355403c3bc4d2428);
+            L.control.scale().addTo(map_a987810f359dcda20487ab3a74e96b92);
 
             
 
         
     
-            var tile_layer_bf6f1ca1af5ff2a3ce1b6915515ce409 = L.tileLayer(
+            var tile_layer_56895e1c86274d9c830211e7d75f2184 = L.tileLayer(
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -215,16 +260,16 @@
             );
         
     
-            tile_layer_bf6f1ca1af5ff2a3ce1b6915515ce409.addTo(map_505246cbaa15abda355403c3bc4d2428);
+            tile_layer_56895e1c86274d9c830211e7d75f2184.addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var circle_marker_a60148e6cd8c919f838768173b01a282 = L.circleMarker(
+            var circle_marker_19fb50509e2955240225dc89305dae07 = L.circleMarker(
                 [36.094567, -79.78455],
                 {"bubblingMouseEvents": true, "color": "#2c7fb8", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2c7fb8", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4, "stroke": true, "weight": 3}
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            circle_marker_a60148e6cd8c919f838768173b01a282.bindTooltip(
+            circle_marker_19fb50509e2955240225dc89305dae07.bindTooltip(
                 `<div>
                      Center
                  </div>`,
@@ -234,70 +279,70 @@
             );
         
     
-            var circle_69bfd0456486478b6fc0f97583430fed = L.circle(
+            var circle_79a3bcd1ccbe246b6bb2fcf85b6e5b7b = L.circle(
                 [36.094567, -79.78455],
                 {"bubblingMouseEvents": true, "color": "#666666", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#666666", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 5000.0, "stroke": true, "weight": 2}
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var marker_105df041330f94a2794723653312000e = L.marker(
+            var marker_f3a3f983969f224323add7a24b537af5 = L.marker(
                 [36.13961204504504, -79.78455],
                 {
 }
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var div_icon_3887d94f154ad259bb7aade4115ef12d = L.divIcon({
+            var div_icon_99c01efc809fe6ec984f7cd7a3f13cda = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#666666;\u0027\u003e5 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_105df041330f94a2794723653312000e.setIcon(div_icon_3887d94f154ad259bb7aade4115ef12d);
+                marker_f3a3f983969f224323add7a24b537af5.setIcon(div_icon_99c01efc809fe6ec984f7cd7a3f13cda);
             
     
-            var circle_f6c541e37cc88dba5a38f7fa0cd5670e = L.circle(
+            var circle_12e8bdcc6698ce905fef094ef42a3d30 = L.circle(
                 [36.094567, -79.78455],
                 {"bubblingMouseEvents": true, "color": "#555555", "dashArray": "6,8", "dashOffset": null, "fill": false, "fillColor": "#555555", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 10000.0, "stroke": true, "weight": 2}
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var marker_b96b3e6b53ed310442204120df292b85 = L.marker(
+            var marker_701b7d264e0d3e04469e99370449046a = L.marker(
                 [36.18465709009009, -79.78455],
                 {
 }
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var div_icon_39356d607e12eae15ecf34c8c09c1e37 = L.divIcon({
+            var div_icon_9db9f150ea30c04a833187a3df45c8c4 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#555555;\u0027\u003e10 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_b96b3e6b53ed310442204120df292b85.setIcon(div_icon_39356d607e12eae15ecf34c8c09c1e37);
+                marker_701b7d264e0d3e04469e99370449046a.setIcon(div_icon_9db9f150ea30c04a833187a3df45c8c4);
             
     
-            var circle_a061e2bad79cbfb23efb7bf6153f97cb = L.circle(
+            var circle_c52656686b1567292859eeff2261f97f = L.circle(
                 [36.094567, -79.78455],
                 {"bubblingMouseEvents": true, "color": "#08519c", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#08519c", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 0.9, "radius": 15000.0, "stroke": true, "weight": 3}
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var marker_ef8127cb5b871839f6f053b6d683e888 = L.marker(
+            var marker_15c16ff0b25bbf8ae77780dcc97ccf5b = L.marker(
                 [36.229702135135135, -79.78455],
                 {
 }
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var div_icon_475611c50a38d1a537486eac782605bf = L.divIcon({
+            var div_icon_bfa1ea95028ac5be2a585e3cf9b56da3 = L.divIcon({
   "html": "\u003cdiv style=\u0027font-size:12px; color:#08519c; font-weight:bold;\u0027\u003e15 km\u003c/div\u003e",
   "className": "empty",
 });
         
     
-                marker_ef8127cb5b871839f6f053b6d683e888.setIcon(div_icon_475611c50a38d1a537486eac782605bf);
+                marker_15c16ff0b25bbf8ae77780dcc97ccf5b.setIcon(div_icon_bfa1ea95028ac5be2a585e3cf9b56da3);
             
     
             L.control.fullscreen(
@@ -307,16 +352,16 @@
   "titleCancel": "Exit Full Screen",
   "forceSeparateButton": false,
 }
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
         
     
-            var locate_control_a8dd0db8e2a7563c4a5c69764b8c8ed2 = L.control.locate(
+            var locate_control_734c036081f67c11d27e6a2fa8cda730 = L.control.locate(
                 {"keepCurrentZoomLevel": false}
-            ).addTo(map_505246cbaa15abda355403c3bc4d2428);
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
             
         
     
-            var mouse_position_4b1e2cd3814f9a97f080b442221a2a72 = new L.Control.MousePosition(
+            var mouse_position_62c5d15bc07fee6dfbb2497f5d8beaf6 = new L.Control.MousePosition(
                 {
   "position": "bottomright",
   "separator": " , ",
@@ -326,11 +371,402 @@
   "prefix": "Lat, Lon:",
 }
             );
-            mouse_position_4b1e2cd3814f9a97f080b442221a2a72.options["latFormatter"] =
+            mouse_position_62c5d15bc07fee6dfbb2497f5d8beaf6.options["latFormatter"] =
                 undefined;
-            mouse_position_4b1e2cd3814f9a97f080b442221a2a72.options["lngFormatter"] =
+            mouse_position_62c5d15bc07fee6dfbb2497f5d8beaf6.options["lngFormatter"] =
                 undefined;
-            map_505246cbaa15abda355403c3bc4d2428.addControl(mouse_position_4b1e2cd3814f9a97f080b442221a2a72);
+            map_a987810f359dcda20487ab3a74e96b92.addControl(mouse_position_62c5d15bc07fee6dfbb2497f5d8beaf6);
+        
+    
+            var feature_group_9e2aebdefaee20a04bac71a08188a8d8 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_e71ea7b9abfb36897f606757d92714b0 = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_680711cf42fd50a0646706a0fa4c7b9e = L.marker(
+                [36.174311, -79.789856],
+                {
+}
+            ).addTo(marker_cluster_e71ea7b9abfb36897f606757d92714b0);
+        
+    
+            var div_icon_31b5a335b5debb57e7261ce51e8dded9 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3222f;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_c6743486aa09777edd74f8bdffdf43a6 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_69fe1f16b78935e0dbc88796a3c03310 = $(`<div id="html_69fe1f16b78935e0dbc88796a3c03310" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>American Avocet</b></div><div><b>Location:</b> Crockett Trail, Greensboro US-NC (36.1743,-79.7899)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408712061' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 12:49 (1)</li></ul></div></div>`)[0];
+                popup_c6743486aa09777edd74f8bdffdf43a6.setContent(html_69fe1f16b78935e0dbc88796a3c03310);
+            
+        
+
+        marker_680711cf42fd50a0646706a0fa4c7b9e.bindPopup(popup_c6743486aa09777edd74f8bdffdf43a6)
+        ;
+
+        
+    
+    
+            marker_680711cf42fd50a0646706a0fa4c7b9e.bindTooltip(
+                `<div>
+                     American Avocet
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_680711cf42fd50a0646706a0fa4c7b9e.setIcon(div_icon_31b5a335b5debb57e7261ce51e8dded9);
+            
+    
+            var marker_843171018c4003d719232bf91b2daba0 = L.marker(
+                [36.176555, -79.790931],
+                {
+}
+            ).addTo(marker_cluster_e71ea7b9abfb36897f606757d92714b0);
+        
+    
+            var div_icon_24d232afb77e1d91bc11391468f01809 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3222f;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_41cb7788c0c14a0857d8397165377f63 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_0f8230df433c261e72dd6d03b8bc7d46 = $(`<div id="html_0f8230df433c261e72dd6d03b8bc7d46" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>American Avocet</b></div><div><b>Location:</b> Lake Townsend--Church St. Bridge (North)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408727235' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:55 (1)</li></ul></div></div>`)[0];
+                popup_41cb7788c0c14a0857d8397165377f63.setContent(html_0f8230df433c261e72dd6d03b8bc7d46);
+            
+        
+
+        marker_843171018c4003d719232bf91b2daba0.bindPopup(popup_41cb7788c0c14a0857d8397165377f63)
+        ;
+
+        
+    
+    
+            marker_843171018c4003d719232bf91b2daba0.bindTooltip(
+                `<div>
+                     American Avocet
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_843171018c4003d719232bf91b2daba0.setIcon(div_icon_24d232afb77e1d91bc11391468f01809);
+            
+    
+            var marker_e07b084db8e9eb7dc5e1a690194948f5 = L.marker(
+                [36.173621, -79.789766],
+                {
+}
+            ).addTo(marker_cluster_e71ea7b9abfb36897f606757d92714b0);
+        
+    
+            var div_icon_6fa7a00628c800aa2dcc1cba2dc5e594 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3222f;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_0d782a9a4dcce7a2116724d39b7ac20d = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_716c3e00eb5451e143332b91c9427c4b = $(`<div id="html_716c3e00eb5451e143332b91c9427c4b" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>American Avocet</b></div><div><b>Location:</b> Crockett Trail, Greensboro US-NC 36.17362, -79.78977</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408702807' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:51 (1)</li></ul></div></div>`)[0];
+                popup_0d782a9a4dcce7a2116724d39b7ac20d.setContent(html_716c3e00eb5451e143332b91c9427c4b);
+            
+        
+
+        marker_e07b084db8e9eb7dc5e1a690194948f5.bindPopup(popup_0d782a9a4dcce7a2116724d39b7ac20d)
+        ;
+
+        
+    
+    
+            marker_e07b084db8e9eb7dc5e1a690194948f5.bindTooltip(
+                `<div>
+                     American Avocet
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_e07b084db8e9eb7dc5e1a690194948f5.setIcon(div_icon_6fa7a00628c800aa2dcc1cba2dc5e594);
+            
+    
+            marker_cluster_e71ea7b9abfb36897f606757d92714b0.addTo(feature_group_9e2aebdefaee20a04bac71a08188a8d8);
+        
+    
+            feature_group_9e2aebdefaee20a04bac71a08188a8d8.addTo(map_a987810f359dcda20487ab3a74e96b92);
+        
+    
+            var feature_group_e14aba90ca721c0b2002158bcfdb06e7 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_33598dd113440170eb972de5efb56d0d = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_ca840e14c49d67df07242c2366e2fa61 = L.marker(
+                [36.174311, -79.789856],
+                {
+}
+            ).addTo(marker_cluster_33598dd113440170eb972de5efb56d0d);
+        
+    
+            var div_icon_ff74ee757d52f6c33adcf4632e5dad12 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32265;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_c35363d7e617689103dc098a17fbcb40 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_f86d60ee9d976f1c5d1d83585e6f5c67 = $(`<div id="html_f86d60ee9d976f1c5d1d83585e6f5c67" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Lesser Yellowlegs</b></div><div><b>Location:</b> Crockett Trail, Greensboro US-NC (36.1743,-79.7899)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408712061' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 12:49 (1)</li></ul></div></div>`)[0];
+                popup_c35363d7e617689103dc098a17fbcb40.setContent(html_f86d60ee9d976f1c5d1d83585e6f5c67);
+            
+        
+
+        marker_ca840e14c49d67df07242c2366e2fa61.bindPopup(popup_c35363d7e617689103dc098a17fbcb40)
+        ;
+
+        
+    
+    
+            marker_ca840e14c49d67df07242c2366e2fa61.bindTooltip(
+                `<div>
+                     Lesser Yellowlegs
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_ca840e14c49d67df07242c2366e2fa61.setIcon(div_icon_ff74ee757d52f6c33adcf4632e5dad12);
+            
+    
+            var marker_21e3b2ce436c6b5e27afb7094e8c6267 = L.marker(
+                [36.176555, -79.790931],
+                {
+}
+            ).addTo(marker_cluster_33598dd113440170eb972de5efb56d0d);
+        
+    
+            var div_icon_897a65e974fffb54e0cd3d1b1925c683 = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32265;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_51510110a6966378fe618a2295f52aac = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_d212abb7a2090dba9d311794abd8ac62 = $(`<div id="html_d212abb7a2090dba9d311794abd8ac62" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Lesser Yellowlegs</b></div><div><b>Location:</b> Lake Townsend--Church St. Bridge (North)</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408727235' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:55 (1)</li></ul></div></div>`)[0];
+                popup_51510110a6966378fe618a2295f52aac.setContent(html_d212abb7a2090dba9d311794abd8ac62);
+            
+        
+
+        marker_21e3b2ce436c6b5e27afb7094e8c6267.bindPopup(popup_51510110a6966378fe618a2295f52aac)
+        ;
+
+        
+    
+    
+            marker_21e3b2ce436c6b5e27afb7094e8c6267.bindTooltip(
+                `<div>
+                     Lesser Yellowlegs
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_21e3b2ce436c6b5e27afb7094e8c6267.setIcon(div_icon_897a65e974fffb54e0cd3d1b1925c683);
+            
+    
+            var marker_512aaf2a9b94b00a4af6179de2d6c055 = L.marker(
+                [36.173621, -79.789766],
+                {
+}
+            ).addTo(marker_cluster_33598dd113440170eb972de5efb56d0d);
+        
+    
+            var div_icon_8e52356cbf5b3f390e999021e173396b = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c32265;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_5390b1481bccad30d4b2a70b749dc33f = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_d3b2238dd3e0e084930b6b8579f59319 = $(`<div id="html_d3b2238dd3e0e084930b6b8579f59319" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>Lesser Yellowlegs</b></div><div><b>Location:</b> Crockett Trail, Greensboro US-NC 36.17362, -79.78977</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408702807' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 11:51 (1)</li></ul></div></div>`)[0];
+                popup_5390b1481bccad30d4b2a70b749dc33f.setContent(html_d3b2238dd3e0e084930b6b8579f59319);
+            
+        
+
+        marker_512aaf2a9b94b00a4af6179de2d6c055.bindPopup(popup_5390b1481bccad30d4b2a70b749dc33f)
+        ;
+
+        
+    
+    
+            marker_512aaf2a9b94b00a4af6179de2d6c055.bindTooltip(
+                `<div>
+                     Lesser Yellowlegs
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_512aaf2a9b94b00a4af6179de2d6c055.setIcon(div_icon_8e52356cbf5b3f390e999021e173396b);
+            
+    
+            marker_cluster_33598dd113440170eb972de5efb56d0d.addTo(feature_group_e14aba90ca721c0b2002158bcfdb06e7);
+        
+    
+            feature_group_e14aba90ca721c0b2002158bcfdb06e7.addTo(map_a987810f359dcda20487ab3a74e96b92);
+        
+    
+            var feature_group_95e507017bf41d2f40a790f4c94679d5 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var marker_cluster_ba4e8553f33525b7295f775175d4117a = L.markerClusterGroup(
+                {
+}
+            );
+        
+    
+            var marker_9973529f67e17c649788d7f1346805c5 = L.marker(
+                [36.1697367, -79.8366809],
+                {
+}
+            ).addTo(marker_cluster_ba4e8553f33525b7295f775175d4117a);
+        
+    
+            var div_icon_cfbc0fa64e05194ec7d6765243472e8a = L.divIcon({
+  "html": "\u003cdiv style=\u0027width:14px;height:14px;border-radius:50%;background:#c3226d;border:1.5px solid #222;\u0027\u003e\u003c/div\u003e",
+  "iconSize": [14, 14],
+  "iconAnchor": [7, 7],
+  "className": "empty",
+});
+        
+    
+        var popup_dcbb54aa413d275a2e75ad7f1a22f961 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_059f21ca30bf590f834c3031a9689626 = $(`<div id="html_059f21ca30bf590f834c3031a9689626" style="width: 100.0%; height: 100.0%;"><div style='font-size:13px;'><div><b>White-eyed Vireo</b></div><div><b>Location:</b> Laurel Bluff Trail</div><div style='margin-top:6px; font-weight:600;'>Checklists:</div><ul style='margin:6px 0 0 16px; padding:0;'><li><a href='https://ebird.org/checklist/S408650074' target='_blank' rel='noopener'>Checklist</a> – 2026-11-07 07:58 (1)</li></ul></div></div>`)[0];
+                popup_dcbb54aa413d275a2e75ad7f1a22f961.setContent(html_059f21ca30bf590f834c3031a9689626);
+            
+        
+
+        marker_9973529f67e17c649788d7f1346805c5.bindPopup(popup_dcbb54aa413d275a2e75ad7f1a22f961)
+        ;
+
+        
+    
+    
+            marker_9973529f67e17c649788d7f1346805c5.bindTooltip(
+                `<div>
+                     White-eyed Vireo
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_9973529f67e17c649788d7f1346805c5.setIcon(div_icon_cfbc0fa64e05194ec7d6765243472e8a);
+            
+    
+            marker_cluster_ba4e8553f33525b7295f775175d4117a.addTo(feature_group_95e507017bf41d2f40a790f4c94679d5);
+        
+    
+            feature_group_95e507017bf41d2f40a790f4c94679d5.addTo(map_a987810f359dcda20487ab3a74e96b92);
+        
+    
+            var layer_control_63af66a3257e0526181a89a5a7ab551f_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_56895e1c86274d9c830211e7d75f2184,
+                },
+                overlays :  {
+                    "American Avocet" : feature_group_9e2aebdefaee20a04bac71a08188a8d8,
+                    "Lesser Yellowlegs" : feature_group_e14aba90ca721c0b2002158bcfdb06e7,
+                    "White-eyed Vireo" : feature_group_95e507017bf41d2f40a790f4c94679d5,
+                },
+            };
+            let layer_control_63af66a3257e0526181a89a5a7ab551f = L.control.layers(
+                layer_control_63af66a3257e0526181a89a5a7ab551f_layers.base_layers,
+                layer_control_63af66a3257e0526181a89a5a7ab551f_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_a987810f359dcda20487ab3a74e96b92);
+
         
 </script>
 </html>
